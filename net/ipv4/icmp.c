@@ -1304,9 +1304,10 @@ int icmp_rcv(struct sk_buff *skb)
 		goto reason_check;
 	}
 
-	if (icmph->type == ICMP_EXT_ECHOREPLY) {
+	if (icmph->type == ICMP_EXT_ECHOREPLY ||
+	    icmph->type == ICMP_ECHOREPLY) {
 		reason = ping_rcv(skb);
-		goto reason_check;
+		return reason ? NET_RX_DROP : NET_RX_SUCCESS;
 	}
 
 	/*
