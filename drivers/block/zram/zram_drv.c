@@ -1744,7 +1744,7 @@ static int decompress_bdev_page(struct zram *zram, struct page *page, u32 index)
 	if (!ret)
 		copy_page(src, zstrm->local_copy);
 	kunmap_local(src);
-	zcomp_stream_put(zram->comps[prio]);
+	zcomp_stream_put(zstrm);
 	zram_slot_unlock(zram, index);
 
 	return ret;
@@ -2530,7 +2530,7 @@ static int read_from_zspool(struct zram *zram, struct page *page, u32 index)
 		ret = zcomp_decompress(zram->comps[prio], zstrm,
 				       src, size, dst);
 		kunmap_local(dst);
-		zcomp_stream_put(zram->comps[prio]);
+		zcomp_stream_put(zstrm);
 	}
 	zs_unmap_object(zram->mem_pool, handle);
 	return ret;
@@ -2626,7 +2626,7 @@ compress_again:
 	kunmap_local(src);
 
 	if (unlikely(ret)) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zcomp_stream_put(zstrm);
 		pr_err("Compression failed! err=%d\n", ret);
 		zs_free(zram->mem_pool, handle);
 		return ret;
@@ -2655,7 +2655,7 @@ compress_again:
 				__GFP_MOVABLE |
 				__GFP_CMA);
 	if (IS_ERR_VALUE(handle)) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zcomp_stream_put(zstrm);
 		atomic64_inc(&zram->stats.writestall);
 		handle = zs_malloc(zram->mem_pool, comp_len,
 				GFP_NOIO | __GFP_HIGHMEM |
@@ -2679,7 +2679,7 @@ compress_again:
 	update_used_max(zram, alloced_pages);
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
-		zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+		zcomp_stream_put(zstrm);
 		zs_free(zram->mem_pool, handle);
 		return -ENOMEM;
 	}
@@ -2693,7 +2693,7 @@ compress_again:
 	if (comp_len == PAGE_SIZE)
 		kunmap_local(src);
 
-	zcomp_stream_put(zram->comps[ZRAM_PRIMARY_COMP]);
+	zcomp_stream_put(zstrm);
 	zs_unmap_object(zram->mem_pool, handle);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
 out:
@@ -2869,7 +2869,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		kunmap_local(src);
 
 		if (ret) {
-			zcomp_stream_put(zram->comps[prio]);
+			zcomp_stream_put(zstrm);
 			return ret;
 		}
 
@@ -2879,7 +2879,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		/* Continue until we make progress */
 		if (class_index_new >= class_index_old ||
 		    (threshold && comp_len_new >= threshold)) {
-			zcomp_stream_put(zram->comps[prio]);
+			zcomp_stream_put(zstrm);
 			continue;
 		}
 
@@ -2937,13 +2937,13 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 			       __GFP_HIGHMEM |
 			       __GFP_MOVABLE);
 	if (IS_ERR_VALUE(handle_new)) {
-		zcomp_stream_put(zram->comps[prio]);
+		zcomp_stream_put(zstrm);
 		return PTR_ERR((void *)handle_new);
 	}
 
 	dst = zs_map_object(zram->mem_pool, handle_new, ZS_MM_WO);
 	memcpy(dst, zstrm->buffer, comp_len_new);
-	zcomp_stream_put(zram->comps[prio]);
+	zcomp_stream_put(zstrm);
 
 	zs_unmap_object(zram->mem_pool, handle_new);
 
