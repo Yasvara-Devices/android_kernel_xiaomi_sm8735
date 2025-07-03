@@ -4131,6 +4131,7 @@ static bool try_to_inc_min_seq(struct lruvec *lruvec, int swappiness)
 {
 	int gen, type, zone;
 	bool success = false;
+	bool seq_inc_flag = false;
 	bool skip = false;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	DEFINE_MIN_SEQ(lruvec);
@@ -4148,10 +4149,19 @@ static bool try_to_inc_min_seq(struct lruvec *lruvec, int swappiness)
 			}
 
 			min_seq[type]++;
+			seq_inc_flag = true;
 		}
 next:
 		;
 	}
+
+	/*
+	 * If min_seq[type] of both anonymous and file is not increased,
+	 * we can directly return false to avoid unnecessary checking
+	 * overhead later.
+	 */
+	if (!seq_inc_flag)
+		return success;
 
 	trace_android_vh_mglru_skip_min_seq_balance(lruvec, swappiness, &skip);
 
