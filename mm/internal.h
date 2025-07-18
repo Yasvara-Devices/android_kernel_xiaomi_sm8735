@@ -165,13 +165,18 @@ typedef int __bitwise fpb_t;
 /* Compare PTEs after pte_clear_soft_dirty(), ignoring the soft-dirty bit. */
 #define FPB_IGNORE_SOFT_DIRTY		((__force fpb_t)BIT(1))
 
+/* Compare PTEs respecting the writable bit. */
+#define FPB_RESPECT_WRITE		((__force fpb_t)BIT(2))
+
 static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
 {
 	if (flags & FPB_IGNORE_DIRTY)
 		pte = pte_mkclean(pte);
 	if (likely(flags & FPB_IGNORE_SOFT_DIRTY))
 		pte = pte_clear_soft_dirty(pte);
-	return pte_wrprotect(pte_mkold(pte));
+	if (!(flags & FPB_RESPECT_WRITE))
+		pte = pte_wrprotect(pte);
+	return pte_mkold(pte);
 }
 
 /**
