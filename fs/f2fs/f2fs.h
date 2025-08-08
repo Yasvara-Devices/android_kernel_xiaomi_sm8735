@@ -164,6 +164,12 @@ enum blkzone_allocation_policy {
 	BLKZONE_ALLOC_PRIOR_CONV,	/* Prioritize writing to conventional zones */
 };
 
+enum bggc_io_aware_policy {
+	AWARE_ALL_IO,		/* skip background GC if there is any kind of pending IO */
+	AWARE_READ_IO,		/* skip background GC if there is pending read IO */
+	AWARE_NONE,			/* don't aware IO for background GC */
+};
+
 enum f2fs_lock_name {
 	LOCK_NAME_NONE,
 	LOCK_NAME_CP_RWSEM,
@@ -1898,6 +1904,7 @@ struct f2fs_sb_info {
 	bool aligned_blksize;			/* all devices has the same logical blksize */
 	unsigned int first_seq_zone_segno;	/* first segno in sequential zone */
 	unsigned int pinned_area_max_secno;	/* upper bound section for pinned files */
+	unsigned int bggc_io_aware;		/* For adjust the BG_GC priority when pending IO */
 
 	/* For write statistics */
 	u64 sectors_written_start;
@@ -3098,19 +3105,13 @@ static inline bool is_inflight_read_io(struct f2fs_sb_info *sbi)
 
 static inline bool is_idle(struct f2fs_sb_info *sbi, int type)
 {
-	bool zoned_gc = (type == GC_TIME &&
-			F2FS_HAS_FEATURE(sbi, F2FS_FEATURE_BLKZONED));
-
 	if (sbi->gc_mode == GC_URGENT_HIGH)
 		return true;
 
-	if (zoned_gc) {
-		if (is_inflight_read_io(sbi))
-			return false;
-	} else {
-		if (is_inflight_io(sbi, type))
-			return false;
-	}
+	if (sbi->bggc_io_aware == AWARE_READ_IO && is_inflight_read_io(sbi))
+		return false;
+	if (sbi->bggc_io_aware == AWARE_ALL_IO && is_inflight_io(sbi, type))
+		return false;
 
 	if (sbi->gc_mode == GC_URGENT_MID)
 		return true;
