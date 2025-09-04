@@ -3794,6 +3794,7 @@ static vm_fault_t filemap_map_folio_range(struct vm_fault *vmf,
 			unsigned long addr, unsigned int nr_pages,
 			unsigned long *rss, unsigned short *mmap_miss)
 {
+	unsigned int ref_from_caller = 1;
 	vm_fault_t ret = 0;
 	struct page *page = folio_page(folio, start);
 	unsigned int count = 0;
@@ -3842,7 +3843,8 @@ skip:
 		if (count) {
 			set_pte_range(vmf, folio, page, count, addr);
 			*rss += count;
-			folio_ref_add(folio, count);
+			folio_ref_add(folio, count - ref_from_caller);
+			ref_from_caller = 0;
 			if (in_range(vmf->address, addr, count * PAGE_SIZE))
 				ret = VM_FAULT_NOPAGE;
 		}
@@ -3857,12 +3859,16 @@ skip:
 	if (count) {
 		set_pte_range(vmf, folio, page, count, addr);
 		*rss += count;
-		folio_ref_add(folio, count);
+		folio_ref_add(folio, count - ref_from_caller);
+		ref_from_caller = 0;
 		if (in_range(vmf->address, addr, count * PAGE_SIZE))
 			ret = VM_FAULT_NOPAGE;
 	}
 
 	vmf->pte = old_ptep;
+	if (ref_from_caller)
+		/* Locked folios cannot get truncated. */
+		folio_ref_dec(folio);
 
 	return ret;
 }
@@ -3875,7 +3881,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	struct page *page = &folio->page;
 
 	if (PageHWPoison(page))
-		return ret;
+		goto out;
 
 	/* See comment of filemap_map_folio_range() */
 	if (!folio_test_workingset(folio))
@@ -3887,16 +3893,19 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	 * the fault-around logic.
 	 */
 	if (!pte_none(ptep_get(vmf->pte)))
-		return ret;
+		goto out;
 
 	if (vmf->address == addr)
 		ret = VM_FAULT_NOPAGE;
 
 	set_pte_range(vmf, folio, page, 1, addr);
 	(*rss)++;
-	folio_ref_inc(folio);
 	trace_android_vh_map_order0_folio(vmf->vma->vm_file, vmf->pgoff, folio, ret);
+	return ret;
 
+out:
+	/* Locked folios cannot get truncated. */
+	folio_ref_dec(folio);
 	return ret;
 }
 
@@ -3976,9 +3985,8 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 					xas.xa_index - folio->index, addr,
 					nr_pages, &rss, &mmap_miss);
 
-		folio_unlock(folio);
 		trace_android_vh_filemap_folio_mapped(folio);
-		folio_put(folio);
+		folio_unlock(folio);
 	} while ((folio = next_uptodate_folio(&xas, mapping, end_pgoff)) != NULL);
 	add_mm_counter(vma->vm_mm, folio_type, rss);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
