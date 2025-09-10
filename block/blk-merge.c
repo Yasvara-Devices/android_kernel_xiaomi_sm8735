@@ -123,7 +123,12 @@ static struct bio *bio_submit_split(struct bio *bio, int split_sectors)
 		bio_chain(split, bio);
 		trace_block_split(split, bio->bi_iter.bi_sector);
 		WARN_ON_ONCE(bio_zone_write_plugging(bio));
-		submit_bio_noacct(bio);
+
+		if (should_fail_bio(bio))
+			bio_io_error(bio);
+		else if (!blk_throtl_bio(bio))
+			submit_bio_noacct_nocheck(bio);
+
 		return split;
 	}
 
