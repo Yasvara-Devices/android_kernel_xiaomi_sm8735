@@ -507,6 +507,8 @@ int inet_frag_queue_insert(struct inet_frag_queue *q, struct sk_buff *skb,
 	}
 
 	FRAG_CB(skb)->ip_defrag_offset = offset;
+	if (offset)
+		nf_reset_ct(skb);
 
 	q->truesize += skb->truesize;
 	return IPFRAG_OK;
