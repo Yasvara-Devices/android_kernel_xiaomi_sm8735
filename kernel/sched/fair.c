@@ -3989,12 +3989,17 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 			    unsigned long weight)
 {
 	bool curr = cfs_rq->curr == se;
-	u64 avruntime;
+	bool rel_vprot = false;
+	u64 avruntime, vprot = 0;
 
 	if (se->on_rq) {
 		/* commit outstanding execution time */
 		update_curr(cfs_rq);
 		avruntime = avg_vruntime(cfs_rq);
+		if (curr && protect_slice(se)) {
+			vprot = se->vprot - se->vruntime;
+			rel_vprot = true;
+		}
 		if (!curr)
 			__dequeue_entity(cfs_rq, se);
 		update_load_sub(&cfs_rq->load, se->load.weight);
@@ -4004,7 +4009,11 @@ static void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	trace_android_vh_reweight_entity(se, &weight);
 
 	if (se->on_rq) {
+		if (rel_vprot)
+			vprot = div_s64(vprot * se->load.weight, weight);
 		reweight_eevdf(se, avruntime, weight);
+		if (rel_vprot)
+			se->vprot = se->vruntime + vprot;
 	} else {
 		/*
 		 * Because we keep se->vlag = V - v_i, while: lag_i = w_i*(V - v_i),
