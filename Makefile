@@ -268,8 +268,8 @@ objtree		:= .
 
 VPATH		:=
 
-ifeq ($(KBUILD_EXTMOD),)
 ifdef building_out_of_srctree
+ifeq ($(filter /%,$(KBUILD_EXTMOD)),)
 VPATH		:= $(srctree)
 endif
 endif

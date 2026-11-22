@@ -8,6 +8,7 @@
 #define __SOC_QCOM_SOCINFO_H__
 
 #include <linux/types.h>
+#include <linux/soc/qcom/socinfo.h>
 
 enum feature_code {
 	/* LeapPart feature code */

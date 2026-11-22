@@ -56,6 +56,9 @@
 #define  PON_DBC_SHIFT_GEN1		6
 #define  PON_DBC_SHIFT_GEN2		14
 
+#define PMIC_PWRKEY_BARK_TRIGGER	1
+#define PMIC_PWRKEY_TRIGGER		2
+
 #define  BTN_EN_CTL			0x45
 #define  BTN_EN_DEB			BIT(7)
 #define  BTN_DEB_IN_POL			BIT(3)
@@ -173,11 +176,34 @@ static int pm8941_reboot_notify(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+typedef int (*mi_display_pwrkey_callback)(int);
+static mi_display_pwrkey_callback mi_display_pwrkey_cb;
+
+void mi_display_pwrkey_callback_set(mi_display_pwrkey_callback cb)
+{
+	mi_display_pwrkey_cb = cb;
+	pr_info("%s: func %ps is set.\n", __func__, cb);
+}
+EXPORT_SYMBOL(mi_display_pwrkey_callback_set);
+
 static irqreturn_t pm8941_pwrkey_irq(int irq, void *_data)
 {
 	struct pm8941_pwrkey *pwrkey = _data;
 	unsigned int sts;
 	int err;
+
+	if (!strcmp(pwrkey->data->name, "pmic_pwrkey_bark") ||
+	    !strcmp(pwrkey->data->name, "pmic_pwrkey_resin_bark")) {
+		err = regmap_read(pwrkey->regmap, pwrkey->baseaddr + PON_RT_STS,
+				  &sts);
+		if (err)
+			return IRQ_HANDLED;
+		sts &= pwrkey->data->status_bit;
+		if (sts && mi_display_pwrkey_cb)
+			mi_display_pwrkey_cb(PMIC_PWRKEY_BARK_TRIGGER);
+		if (!strcmp(pwrkey->data->name, "pmic_pwrkey_bark"))
+			return IRQ_HANDLED;
+	}
 
 	if (pwrkey->sw_debounce_time_us) {
 		if (ktime_before(ktime_get(), pwrkey->sw_debounce_end_time)) {
@@ -210,6 +236,9 @@ static irqreturn_t pm8941_pwrkey_irq(int irq, void *_data)
 
 	input_report_key(pwrkey->input, pwrkey->code, sts);
 	input_sync(pwrkey->input);
+
+	if (pwrkey->code == KEY_POWER && !sts && mi_display_pwrkey_cb)
+		mi_display_pwrkey_cb(PMIC_PWRKEY_TRIGGER);
 
 	return IRQ_HANDLED;
 }
@@ -624,6 +653,24 @@ static const struct pm8941_data pon_gen3_resin_data = {
 	.has_pon_pbs = true,
 };
 
+static const struct pm8941_data pon_gen3_pwrkey_bark_data = {
+	.status_bit = PON_GEN3_KPDPWR_N_SET,
+	.name = "pmic_pwrkey_bark",
+	.phys = "pmic_pwrkey_bark/input0",
+	.supports_ps_hold_poff_config = false,
+	.supports_debounce_config = false,
+	.has_pon_pbs = true,
+};
+
+static const struct pm8941_data pon_gen3_pwrkey_resin_bark_data = {
+	.status_bit = PON_GEN3_KPDPWR_N_SET,
+	.name = "pmic_pwrkey_resin_bark",
+	.phys = "pmic_pwrkey_resin_bark/input0",
+	.supports_ps_hold_poff_config = false,
+	.supports_debounce_config = false,
+	.has_pon_pbs = true,
+};
+
 static const struct pm8941_data pmar2230_btn_data = {
 	.status_bit                  = BTN_RT_STS_BIT,
 	.pull_up_bit                 = 0,
@@ -639,6 +686,10 @@ static const struct of_device_id pm8941_pwr_key_id_table[] = {
 	{ .compatible = "qcom,pm8941-resin", .data = &resin_data },
 	{ .compatible = "qcom,pmk8350-pwrkey", .data = &pon_gen3_pwrkey_data },
 	{ .compatible = "qcom,pmk8350-resin", .data = &pon_gen3_resin_data },
+	{ .compatible = "qcom,pmk8350-pwrkey-bark",
+	  .data = &pon_gen3_pwrkey_bark_data },
+	{ .compatible = "qcom,pmk8350-pwrkey-resin-bark",
+	  .data = &pon_gen3_pwrkey_resin_bark_data },
 	{ .compatible = "qcom,pmar2230-btn",       .data = &pmar2230_btn_data },
 	{ }
 };
