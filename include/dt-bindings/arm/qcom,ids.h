@@ -305,6 +305,9 @@
 #define QCOM_ID_IPQ5321			650
 #define QCOM_ID_SG_RAVELIN		653
 #define QCOM_ID_SG_RAVELINP		654
+#define QCOM_ID_TUNA			655
+#define QCOM_ID_TUNA7			681
+#define QCOM_ID_TUNAP			694
 #define QCOM_ID_CANOE			660
 #define QCOM_ID_QCS8845			764
 #define QCOM_ID_CANOEP			661

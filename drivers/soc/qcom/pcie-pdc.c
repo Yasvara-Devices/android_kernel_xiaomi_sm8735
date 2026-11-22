@@ -148,6 +148,16 @@ static const struct pdc_match_data sun_pdc_match_data = {
 	.irq_select_offset = 0x4800,
 };
 
+static const struct irq_map tuna_irq_map[] = {
+	{ 118, 69, 10 },
+};
+
+static const struct pdc_match_data tuna_pdc_match_data = {
+	.map = tuna_irq_map,
+	.size = ARRAY_SIZE(tuna_irq_map),
+	.irq_select_offset = 0x4800,
+};
+
 static const struct irq_map pineapple_irq_map[] = {
 	{ 95, 67, 10 },
 	{ 98, 50, 11 },
@@ -213,6 +223,7 @@ static const struct pdc_match_data seraph_pdc_match_data = {
 
 static const struct of_device_id qcom_pcie_pdc_match_table[] = {
 	{ .compatible = "qcom,sun-pcie-pdc", .data = &sun_pdc_match_data },
+	{ .compatible = "qcom,tuna-pcie-pdc", .data = &tuna_pdc_match_data },
 	{ .compatible = "qcom,pineapple-pcie-pdc", .data = &pineapple_pdc_match_data },
 	{ .compatible = "qcom,cliffs-pcie-pdc", .data = &cliffs_pdc_match_data },
 	{ .compatible = "qcom,canoe-pcie-pdc", .data = &canoe_pdc_match_data },

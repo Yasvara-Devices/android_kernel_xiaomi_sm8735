@@ -387,6 +387,32 @@ void walt_config(void)
 
 
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+	} else if (!strcmp(name, "TUNA") || !strcmp(name, "TUNA7") || !strcmp(name, "TUNAP")) {
+		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
+		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
+		soc_sched_lib_name_capacity = 2;
+		/*
+		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
+		 * Guard this setting by ensuring 4 clusters are present.
+		 */
+		if (num_sched_clusters == 4) {
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][2]);
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][3]);
+		}
+		pipeline_swap_util_th = 100;
+
+		/* Trailblazer settings */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		trailblazer_floor_freq[2] = 1000000;
+		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+
+		/* Do not put the whole cluster at Fmin during thermal halt condition. */
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
+		sysctl_sched_suppress_region2 = 1;
 	}
 
 }

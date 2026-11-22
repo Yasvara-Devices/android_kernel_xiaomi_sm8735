@@ -2298,3 +2298,84 @@ config SM_GCC_FILLMORE
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
+config SM_GCC_TUNA
+	tristate "Tuna Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Tuna devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, SD/UFS, PCIe etc.
+
+config SM_TCSRCC_TUNA
+	tristate "Tuna Top-Level CSR Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the TCSR clock controller on Qualcomm Technologies, Inc
+	  Tuna devices.
+	  Say Y if you want to support miscellaneous top-level clocks
+	  such as for the PHY references.
+
+config SM_VIDEOCC_TUNA
+	tristate "TUNA Video Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  TUNA devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+config SM_EVACC_TUNA
+	tristate "TUNA EVA Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the EVA clock controller on Qualcomm Technologies, Inc.
+	  TUNA devices.
+	  Say Y if you want to support EVA devices to get better
+	  visual analysis.
+
+config SM_GPUCC_TUNA
+	tristate "TUNA Graphics Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  Tuna devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SM_CAMCC_TUNA
+	tristate "TUNA Camera Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  Tuna devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_CAMBISTMCLKCC_TUNA
+	tristate "TUNA CAMBISTMCLK Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the CAMBISTMCLK clock controller on Qualcomm Technologies,
+	  Inc Tuna devices.
+	  Say Y if you want to support camera devices for a better low-latency
+	  clock.
+
+config SM_DISPCC_TUNA
+	tristate "TUNA Display Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  Tuna devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_DEBUGCC_TUNA
+	tristate "Tuna Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  Tuna devices.
+	  Say Y if you want to support the debug clocks such as clock
+	  measurement functionality.
+

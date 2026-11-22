@@ -88,3 +88,4 @@ obj-$(CONFIG_PINCTRL_PIKACHU) += pinctrl-pikachu.o
 obj-$(CONFIG_PINCTRL_SHIKRA) += pinctrl-shikra.o
 obj-$(CONFIG_PINCTRL_GLYMUR) += pinctrl-glymur.o
 obj-$(CONFIG_PINCTRL_SERAPH) += pinctrl-seraph.o
+obj-$(CONFIG_PINCTRL_TUNA) += pinctrl-tuna.o

@@ -287,6 +287,15 @@ config PHY_QCOM_UFS_V4_SUN
 	  This is required to enable UFS on Sun chipset.
 	  To compile this driver as a module, choose M here.
 
+config PHY_QCOM_UFS_V4_NIOBE
+	tristate "Qualcomm Technologies, Inc. UFS Niobe Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  Support for UFS phy present on QCOM Niobe chipsets.
+	  This is required to enable UFS on Niobe chipset.
+	  To compile this driver as a module, choose M here.
+	  This would be needed for all niobe ufs platforms.
+
 
 config PHY_QCOM_UFS_V4_CANOE
 	tristate "Qualcomm Technologies, Inc. UFS Canoe Phy Driver"
