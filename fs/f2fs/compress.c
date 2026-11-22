@@ -14,11 +14,159 @@
 #include <linux/lz4.h>
 #include <linux/zstd.h>
 #include <linux/pagevec.h>
+#include <linux/workqueue.h>
+#include <linux/jiffies.h>
 
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
 #include <trace/events/f2fs.h>
+
+/*
+ * SPEC-0048: Reusable compression/decompression workspace pools with idle
+ * auto-reclaim (modeled on Btrfs zstd workspace manager). Eliminates per-cluster
+ * vmalloc()/vfree() + global vmap_area_lock contention + cross-CPU TLB shootdowns
+ * during parallel LZ4/LZ4HC/ZSTD writeback and ZSTD cluster reads, while holding
+ * zero memory once idle for > 30s.
+ */
+#define F2FS_WS_POOL_MAX	8
+#define F2FS_WS_RECLAIM_DELAY	(30 * HZ)
+
+struct f2fs_ws_node {
+	struct list_head list;
+	unsigned int payload_size;
+	unsigned long last_used;
+} __aligned(16);
+
+struct f2fs_ws_pool {
+	spinlock_t lock;
+	struct list_head free_list;
+	unsigned int count;
+	struct delayed_work reclaim_work;
+};
+
+static struct f2fs_ws_pool f2fs_lz4_ws_pool;
+static struct f2fs_ws_pool f2fs_zstd_c_ws_pool;
+static struct f2fs_ws_pool f2fs_zstd_d_ws_pool;
+
+static void f2fs_ws_reclaim_fn(struct work_struct *work)
+{
+	struct f2fs_ws_pool *pool = container_of(to_delayed_work(work),
+					struct f2fs_ws_pool, reclaim_work);
+	LIST_HEAD(expired);
+	struct f2fs_ws_node *node, *tmp;
+	unsigned long flags;
+	bool reschedule = false;
+
+	spin_lock_irqsave(&pool->lock, flags);
+	list_for_each_entry_safe(node, tmp, &pool->free_list, list) {
+		if (time_after_eq(jiffies, node->last_used + F2FS_WS_RECLAIM_DELAY)) {
+			list_move(&node->list, &expired);
+			pool->count--;
+		}
+	}
+	reschedule = !list_empty(&pool->free_list);
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	list_for_each_entry_safe(node, tmp, &expired, list) {
+		list_del(&node->list);
+		vfree(node);
+	}
+
+	if (reschedule)
+		schedule_delayed_work(&pool->reclaim_work, F2FS_WS_RECLAIM_DELAY);
+}
+
+static void f2fs_ws_pool_init(struct f2fs_ws_pool *pool)
+{
+	spin_lock_init(&pool->lock);
+	INIT_LIST_HEAD(&pool->free_list);
+	pool->count = 0;
+	INIT_DELAYED_WORK(&pool->reclaim_work, f2fs_ws_reclaim_fn);
+}
+
+static void f2fs_ws_pool_destroy(struct f2fs_ws_pool *pool)
+{
+	LIST_HEAD(all);
+	struct f2fs_ws_node *node, *tmp;
+	unsigned long flags;
+
+	cancel_delayed_work_sync(&pool->reclaim_work);
+
+	spin_lock_irqsave(&pool->lock, flags);
+	list_splice_init(&pool->free_list, &all);
+	pool->count = 0;
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	list_for_each_entry_safe(node, tmp, &all, list) {
+		list_del(&node->list);
+		vfree(node);
+	}
+}
+
+static void *f2fs_ws_get(struct f2fs_ws_pool *pool, unsigned int need_size)
+{
+	struct f2fs_ws_node *node = NULL, *cur, *too_small = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pool->lock, flags);
+	list_for_each_entry(cur, &pool->free_list, list) {
+		if (cur->payload_size >= need_size) {
+			node = cur;
+			list_del_init(&node->list);
+			pool->count--;
+			break;
+		}
+	}
+	if (!node && !list_empty(&pool->free_list)) {
+		too_small = list_last_entry(&pool->free_list,
+					struct f2fs_ws_node, list);
+		list_del_init(&too_small->list);
+		pool->count--;
+	}
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	if (node)
+		return node + 1;
+
+	if (too_small)
+		vfree(too_small);
+
+	node = f2fs_vmalloc(sizeof(*node) + need_size);
+	if (!node)
+		return NULL;
+	INIT_LIST_HEAD(&node->list);
+	node->payload_size = need_size;
+	node->last_used = jiffies;
+	return node + 1;
+}
+
+static void f2fs_ws_put(struct f2fs_ws_pool *pool, void *payload)
+{
+	struct f2fs_ws_node *node;
+	unsigned long flags;
+	bool free_now = false;
+
+	if (!payload)
+		return;
+
+	node = ((struct f2fs_ws_node *)payload) - 1;
+	node->last_used = jiffies;
+
+	spin_lock_irqsave(&pool->lock, flags);
+	if (pool->count < F2FS_WS_POOL_MAX) {
+		list_add(&node->list, &pool->free_list);
+		pool->count++;
+	} else {
+		free_now = true;
+	}
+	spin_unlock_irqrestore(&pool->lock, flags);
+
+	if (free_now)
+		vfree(node);
+	else
+		schedule_delayed_work(&pool->reclaim_work, F2FS_WS_RECLAIM_DELAY);
+}
 
 static struct kmem_cache *cic_entry_slab;
 static struct kmem_cache *dic_entry_slab;
@@ -243,7 +391,7 @@ static int lz4_init_compress_ctx(struct compress_ctx *cc)
 		size = LZ4HC_MEM_COMPRESS;
 #endif
 
-	cc->private = f2fs_vmalloc(size);
+	cc->private = f2fs_ws_get(&f2fs_lz4_ws_pool, size);
 	if (!cc->private)
 		return -ENOMEM;
 
@@ -258,7 +406,7 @@ static int lz4_init_compress_ctx(struct compress_ctx *cc)
 
 static void lz4_destroy_compress_ctx(struct compress_ctx *cc)
 {
-	vfree(cc->private);
+	f2fs_ws_put(&f2fs_lz4_ws_pool, cc->private);
 	cc->private = NULL;
 }
 
@@ -339,7 +487,7 @@ static int zstd_init_compress_ctx(struct compress_ctx *cc)
 	params = zstd_get_params(level, cc->rlen);
 	workspace_size = zstd_cstream_workspace_bound(&params.cParams);
 
-	workspace = f2fs_vmalloc(workspace_size);
+	workspace = f2fs_ws_get(&f2fs_zstd_c_ws_pool, workspace_size);
 	if (!workspace)
 		return -ENOMEM;
 
@@ -347,7 +495,7 @@ static int zstd_init_compress_ctx(struct compress_ctx *cc)
 	if (!stream) {
 		f2fs_err_ratelimited(F2FS_I_SB(cc->inode),
 				"%s zstd_init_cstream failed", __func__);
-		vfree(workspace);
+		f2fs_ws_put(&f2fs_zstd_c_ws_pool, workspace);
 		return -EIO;
 	}
 
@@ -360,7 +508,7 @@ static int zstd_init_compress_ctx(struct compress_ctx *cc)
 
 static void zstd_destroy_compress_ctx(struct compress_ctx *cc)
 {
-	vfree(cc->private);
+	f2fs_ws_put(&f2fs_zstd_c_ws_pool, cc->private);
 	cc->private = NULL;
 	cc->private2 = NULL;
 }
@@ -419,7 +567,7 @@ static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 
 	workspace_size = zstd_dstream_workspace_bound(max_window_size);
 
-	workspace = f2fs_vmalloc(workspace_size);
+	workspace = f2fs_ws_get(&f2fs_zstd_d_ws_pool, workspace_size);
 	if (!workspace)
 		return -ENOMEM;
 
@@ -427,7 +575,7 @@ static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 	if (!stream) {
 		f2fs_err_ratelimited(dic->sbi,
 				"%s zstd_init_dstream failed", __func__);
-		vfree(workspace);
+		f2fs_ws_put(&f2fs_zstd_d_ws_pool, workspace);
 		return -EIO;
 	}
 
@@ -439,7 +587,7 @@ static int zstd_init_decompress_ctx(struct decompress_io_ctx *dic)
 
 static void zstd_destroy_decompress_ctx(struct decompress_io_ctx *dic)
 {
-	vfree(dic->private);
+	f2fs_ws_put(&f2fs_zstd_d_ws_pool, dic->private);
 	dic->private = NULL;
 	dic->private2 = NULL;
 }
@@ -551,7 +699,14 @@ bool f2fs_is_compress_backend_ready(struct inode *inode)
 
 bool f2fs_is_compress_level_valid(int alg, int lvl)
 {
-	const struct f2fs_compress_ops *cops = f2fs_cops[alg];
+	const struct f2fs_compress_ops *cops;
+
+	if (alg < 0 || alg >= COMPRESS_MAX)
+		return false;
+
+	cops = f2fs_cops[alg];
+	if (!cops)
+		return false;
 
 	if (cops->is_level_valid)
 		return cops->is_level_valid(lvl);
@@ -2089,6 +2244,10 @@ void f2fs_destroy_page_array_cache(struct f2fs_sb_info *sbi)
 
 int __init f2fs_init_compress_cache(void)
 {
+	f2fs_ws_pool_init(&f2fs_lz4_ws_pool);
+	f2fs_ws_pool_init(&f2fs_zstd_c_ws_pool);
+	f2fs_ws_pool_init(&f2fs_zstd_d_ws_pool);
+
 	cic_entry_slab = f2fs_kmem_cache_create("f2fs_cic_entry",
 					sizeof(struct compress_io_ctx));
 	if (!cic_entry_slab)
@@ -2105,6 +2264,9 @@ free_cic:
 
 void f2fs_destroy_compress_cache(void)
 {
+	f2fs_ws_pool_destroy(&f2fs_zstd_d_ws_pool);
+	f2fs_ws_pool_destroy(&f2fs_zstd_c_ws_pool);
+	f2fs_ws_pool_destroy(&f2fs_lz4_ws_pool);
 	kmem_cache_destroy(dic_entry_slab);
 	kmem_cache_destroy(cic_entry_slab);
 }

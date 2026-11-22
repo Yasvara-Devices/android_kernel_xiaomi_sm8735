@@ -9,6 +9,7 @@
 #include <linux/security.h>
 #include <linux/uaccess.h>
 #include <linux/compat.h>
+#include <linux/yasvara_hide.h>
 #include "internal.h"
 
 static int flags_by_mnt(int mnt_flags)
@@ -127,6 +128,8 @@ static int do_statfs_native(struct kstatfs *st, struct statfs __user *p)
 {
 	struct statfs buf;
 
+	yasvara_normalize_kstatfs(st, yasvara_is_app_uid());
+
 	if (sizeof(buf) == sizeof(*st))
 		memcpy(&buf, st, sizeof(*st));
 	else {
@@ -168,6 +171,9 @@ static int do_statfs_native(struct kstatfs *st, struct statfs __user *p)
 static int do_statfs64(struct kstatfs *st, struct statfs64 __user *p)
 {
 	struct statfs64 buf;
+
+	yasvara_normalize_kstatfs(st, yasvara_is_app_uid());
+
 	if (sizeof(buf) == sizeof(*st))
 		memcpy(&buf, st, sizeof(*st));
 	else {
@@ -267,6 +273,9 @@ SYSCALL_DEFINE2(ustat, unsigned, dev, struct ustat __user *, ubuf)
 static int put_compat_statfs(struct compat_statfs __user *ubuf, struct kstatfs *kbuf)
 {
 	struct compat_statfs buf;
+
+	yasvara_normalize_kstatfs(kbuf, yasvara_is_app_uid());
+
 	if (sizeof ubuf->f_blocks == 4) {
 		if ((kbuf->f_blocks | kbuf->f_bfree | kbuf->f_bavail |
 		     kbuf->f_bsize | kbuf->f_frsize) & 0xffffffff00000000ULL)
@@ -323,6 +332,8 @@ COMPAT_SYSCALL_DEFINE2(fstatfs, unsigned int, fd, struct compat_statfs __user *,
 static int put_compat_statfs64(struct compat_statfs64 __user *ubuf, struct kstatfs *kbuf)
 {
 	struct compat_statfs64 buf;
+
+	yasvara_normalize_kstatfs(kbuf, yasvara_is_app_uid());
 
 	if ((kbuf->f_bsize | kbuf->f_frsize) & 0xffffffff00000000ULL)
 		return -EOVERFLOW;

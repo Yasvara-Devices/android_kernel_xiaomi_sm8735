@@ -4951,6 +4951,11 @@ try_onemore:
 		goto free_node_inode;
 	}
 
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	if (f2fs_sb_has_compression(sbi))
+		sbi->compress_auto_reserve = 1;
+#endif
+
 	err = f2fs_init_compress_inode(sbi);
 	if (err)
 		goto free_root_inode;

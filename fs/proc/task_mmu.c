@@ -26,6 +26,7 @@
 #include <linux/minmax.h>
 #include <linux/overflow.h>
 #include <linux/buildid.h>
+#include <linux/yasvara_hide.h>
 #include <trace/hooks/mm.h>
 
 #include <asm/elf.h>
@@ -531,6 +532,74 @@ static void show_vma_header_prefix(struct seq_file *m,
 	seq_putc(m, ' ');
 }
 
+static noinline bool yasvara_should_hide_vma_dpath(const struct path *path)
+{
+	char buf[512];
+	char *p;
+
+	p = d_path(path, buf, sizeof(buf));
+	if (IS_ERR(p))
+		return false;
+
+	return yasvara_is_forbidden_vma_str_n(p, (size_t)(buf + sizeof(buf) - p));
+}
+
+static bool yasvara_should_hide_vma_file(struct file *file)
+{
+	const struct path *path = &file->f_path;
+	struct dentry *dentry;
+	struct dentry *cur;
+	int depth;
+
+	rcu_read_lock();
+	dentry = READ_ONCE(path->dentry);
+	if (!dentry) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	if (yasvara_is_forbidden_vma_str_n(smp_load_acquire(&dentry->d_name.name),
+					   NAME_MAX + 1)) {
+		rcu_read_unlock();
+		return true;
+	}
+
+	/* Fallback to d_path for synthetic dentries, bind mounts, or tmpfs/ramfs. */
+	if ((dentry->d_op && dentry->d_op->d_dname &&
+	     (!IS_ROOT(dentry) || dentry != path->mnt->mnt_root)) ||
+	    path->mnt->mnt_root != path->mnt->mnt_sb->s_root ||
+	    path->mnt->mnt_sb->s_magic == TMPFS_MAGIC ||
+	    path->mnt->mnt_sb->s_magic == RAMFS_MAGIC) {
+		rcu_read_unlock();
+		return yasvara_should_hide_vma_dpath(path);
+	}
+
+	cur = READ_ONCE(dentry->d_parent);
+	if (dentry == path->mnt->mnt_root || cur == dentry) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	for (depth = 0; depth < 32 && cur && cur != path->mnt->mnt_root; depth++) {
+		struct dentry *parent;
+
+		if (yasvara_is_forbidden_vma_str_n(smp_load_acquire(&cur->d_name.name),
+						   NAME_MAX + 1)) {
+			rcu_read_unlock();
+			return true;
+		}
+		parent = READ_ONCE(cur->d_parent);
+		if (parent == cur)
+			break;
+		cur = parent;
+	}
+	rcu_read_unlock();
+
+	if (depth == 32)
+		return yasvara_should_hide_vma_dpath(path);
+	return false;
+}
+
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 {
@@ -541,6 +610,10 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	unsigned long long pgoff = 0;
 	unsigned long start, end;
 	dev_t dev = 0;
+
+	if (vma->vm_file && yasvara_is_app_uid() &&
+	    yasvara_should_hide_vma_file(vma->vm_file))
+		return;
 
 	if (vma->vm_file) {
 		const struct inode *inode = file_user_inode(vma->vm_file);
@@ -1497,6 +1570,87 @@ static void smap_gather_stats(struct proc_maps_private *priv,
 	smap_gather_stats_range(priv, vma, mss, vma->vm_start);
 }
 
+static inline void yasvara_fold_exec_smap_mss(struct mem_size_stats *mss)
+{
+	yasvara_fold_exec_smap_fields(&mss->shared_clean,
+				      &mss->shared_dirty,
+				      &mss->private_clean,
+				      &mss->private_dirty,
+				      &mss->swap,
+				      &mss->swap_shared,
+				      &mss->pss_dirty,
+				      &mss->swap_pss);
+}
+
+static inline void yasvara_accum_smap_stats(struct mem_size_stats *dst,
+					    const struct mem_size_stats *src)
+{
+	dst->resident += src->resident;
+	dst->shared_clean += src->shared_clean;
+	dst->shared_dirty += src->shared_dirty;
+	dst->private_clean += src->private_clean;
+	dst->private_dirty += src->private_dirty;
+	dst->referenced += src->referenced;
+	dst->anonymous += src->anonymous;
+	dst->lazyfree += src->lazyfree;
+	dst->anonymous_thp += src->anonymous_thp;
+	dst->shmem_thp += src->shmem_thp;
+	dst->file_thp += src->file_thp;
+	dst->swap += src->swap;
+	dst->swap_shared += src->swap_shared;
+	dst->writeback += src->writeback;
+	dst->same += src->same;
+	dst->huge += src->huge;
+	dst->shared_hugetlb += src->shared_hugetlb;
+	dst->private_hugetlb += src->private_hugetlb;
+	dst->ksm += src->ksm;
+	dst->pss += src->pss;
+	dst->pss_anon += src->pss_anon;
+	dst->pss_file += src->pss_file;
+	dst->pss_shmem += src->pss_shmem;
+	dst->pss_dirty += src->pss_dirty;
+	dst->pss_locked += src->pss_locked;
+	dst->swap_pss += src->swap_pss;
+}
+
+static inline void yasvara_gather_smap_stats_filtered(struct proc_maps_private *priv,
+						      struct vm_area_struct *vma,
+						      struct mem_size_stats *mss,
+						      unsigned long start,
+						      bool is_app)
+{
+	struct mem_size_stats vma_mss;
+
+	if (!is_app || !(vma->vm_flags & VM_EXEC)) {
+		if (start)
+			smap_gather_stats_range(priv, vma, mss, start);
+		else
+			smap_gather_stats(priv, vma, mss);
+		return;
+	}
+
+	memset(&vma_mss, 0, sizeof(vma_mss));
+	if (start)
+		smap_gather_stats_range(priv, vma, &vma_mss, start);
+	else
+		smap_gather_stats(priv, vma, &vma_mss);
+	yasvara_fold_exec_smap_mss(&vma_mss);
+	yasvara_accum_smap_stats(mss, &vma_mss);
+}
+
+static inline void yasvara_rollup_vma(struct proc_maps_private *priv,
+				      struct vm_area_struct *vma,
+				      struct mem_size_stats *mss,
+				      unsigned long start,
+				      unsigned long *last_vma_end,
+				      bool is_app)
+{
+	*last_vma_end = vma->vm_end;
+	if (is_app && vma->vm_file && yasvara_should_hide_vma_file(vma->vm_file))
+		return;
+	yasvara_gather_smap_stats_filtered(priv, vma, mss, start, is_app);
+}
+
 #define SEQ_PUT_DEC(str, val) \
 		seq_put_decimal_ull_width(m, str, (val) >> 10, 8)
 
@@ -1548,11 +1702,17 @@ static int show_smap(struct seq_file *m, void *v)
 	struct proc_maps_private *priv = m->private;
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss = {};
+	bool is_app = yasvara_is_app_uid();
+
+	if (is_app && vma->vm_file && yasvara_should_hide_vma_file(vma->vm_file))
+		return 0;
 
 	if (!vma_data_pages(vma))
 		goto show_pad;
 
 	smap_gather_stats(priv, vma, &mss);
+	if (is_app && (vma->vm_flags & VM_EXEC))
+		yasvara_fold_exec_smap_mss(&mss);
 
 	show_map_vma(m, vma);
 
@@ -1612,6 +1772,8 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 	if (!IS_ERR(vma))
 		vma_start = vma->vm_start;
 
+	bool is_app = yasvara_is_app_uid();
+
 	while (vma) {
 		if (IS_ERR(vma)) {
 			ret = PTR_ERR(vma);
@@ -1625,12 +1787,13 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 			 * again. Gather stats for the remaining portion by
 			 * starting at last_vma_end.
 			 */
-			smap_gather_stats_range(priv, vma, &mss, last_vma_end);
+			yasvara_rollup_vma(priv, vma, &mss, last_vma_end,
+					   &last_vma_end, is_app);
 		} else {
 			/* Found next unreported VMA, start from its beginning */
-			smap_gather_stats(priv, vma, &mss);
+			yasvara_rollup_vma(priv, vma, &mss, 0,
+					   &last_vma_end, is_app);
 		}
-		last_vma_end = vma->vm_end;
 
 		/*
 		 * If the VMA lock is not taken, we hold the often contended

@@ -189,7 +189,7 @@ inherit_comp:
 		F2FS_I(inode)->i_flags |= F2FS_NOCOMP_FL;
 		f2fs_mark_inode_dirty_sync(inode, true);
 	} else if (F2FS_I(dir)->i_flags & F2FS_COMPR_FL) {
-		set_compress_context(inode);
+		set_compress_context_from_dir(inode, dir);
 	}
 }
 

@@ -12,6 +12,7 @@
 #include <linux/security.h>
 #include <linux/fs_struct.h>
 #include <linux/sched/task.h>
+#include <linux/yasvara_hide.h>
 
 #include "proc/internal.h" /* only for get_proc_task() in ->open() */
 
@@ -98,13 +99,59 @@ static void show_type(struct seq_file *m, struct super_block *sb)
 	}
 }
 
+static noinline bool yasvara_eval_mount(struct seq_file *m, struct vfsmount *mnt,
+					bool *force_ro)
+{
+	struct proc_mounts *p = m->private;
+	struct mount *r = real_mount(mnt);
+	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
+	struct super_block *sb = mnt->mnt_sb;
+	const char *fstype = (sb && sb->s_type) ? sb->s_type->name : NULL;
+	const char *devname = r->mnt_devname;
+	char buf[512];
+	char *res;
+	bool is_sys = false;
+
+	*force_ro = false;
+	if (!yasvara_is_app_uid())
+		return false;
+
+	if (yasvara_should_hide_mount_parts(fstype, NULL, NULL, devname) ||
+	    yasvara_is_forbidden_mount_str_n(mnt->mnt_root->d_name.name, NAME_MAX + 1) ||
+	    (r->mnt_mountpoint &&
+	     yasvara_is_forbidden_mount_str_n(r->mnt_mountpoint->d_name.name,
+					      NAME_MAX + 1)))
+		return true;
+
+	res = __d_path(&mnt_path, &p->root, buf, sizeof(buf));
+	if (!res)
+		return false;
+	if (!IS_ERR(res)) {
+		if (yasvara_should_hide_mount_parts(fstype, NULL, res, NULL))
+			return true;
+		is_sys = yasvara_is_system_mount_path(res);
+	}
+
+	res = dentry_path_raw(mnt->mnt_root, buf, sizeof(buf));
+	if (!IS_ERR(res) &&
+	    yasvara_should_hide_mount_parts(NULL, res, NULL, NULL))
+		return true;
+
+	*force_ro = is_sys;
+	return false;
+}
+
 static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
 {
 	struct proc_mounts *p = m->private;
 	struct mount *r = real_mount(mnt);
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
 	struct super_block *sb = mnt_path.dentry->d_sb;
+	bool force_ro;
 	int err;
+
+	if (yasvara_eval_mount(m, mnt, &force_ro))
+		return 0;
 
 	if (sb->s_op->show_devname) {
 		err = sb->s_op->show_devname(m, mnt_path.dentry);
@@ -120,7 +167,7 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
 		goto out;
 	seq_putc(m, ' ');
 	show_type(m, sb);
-	seq_puts(m, __mnt_is_readonly(mnt) ? " ro" : " rw");
+	seq_puts(m, (__mnt_is_readonly(mnt) || force_ro) ? " ro" : " rw");
 	err = show_sb_opts(m, sb);
 	if (err)
 		goto out;
@@ -138,7 +185,11 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	struct mount *r = real_mount(mnt);
 	struct super_block *sb = mnt->mnt_sb;
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
+	bool force_ro;
 	int err;
+
+	if (yasvara_eval_mount(m, mnt, &force_ro))
+		return 0;
 
 	seq_printf(m, "%i %i %u:%u ", r->mnt_id, r->mnt_parent->mnt_id,
 		   MAJOR(sb->s_dev), MINOR(sb->s_dev));
@@ -152,7 +203,7 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	if (err)
 		goto out;
 
-	seq_puts(m, mnt->mnt_flags & MNT_READONLY ? " ro" : " rw");
+	seq_puts(m, (force_ro || (mnt->mnt_flags & MNT_READONLY)) ? " ro" : " rw");
 	show_vfsmnt_opts(m, mnt);
 
 	/* Tagged fields ("foo:X" or "bar") */
@@ -179,7 +230,7 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	} else {
 		mangle(m, r->mnt_devname ? r->mnt_devname : "none");
 	}
-	seq_puts(m, sb_rdonly(sb) ? " ro" : " rw");
+	seq_puts(m, (force_ro || sb_rdonly(sb)) ? " ro" : " rw");
 	err = show_sb_opts(m, sb);
 	if (err)
 		goto out;
@@ -196,7 +247,11 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
 	struct mount *r = real_mount(mnt);
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
 	struct super_block *sb = mnt_path.dentry->d_sb;
+	bool force_ro;
 	int err;
+
+	if (yasvara_eval_mount(m, mnt, &force_ro))
+		return 0;
 
 	/* device */
 	if (sb->s_op->show_devname) {

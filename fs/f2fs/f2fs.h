@@ -1927,7 +1927,9 @@ struct f2fs_sb_info {
 	/* For runtime compression statistics */
 	u64 compr_written_block;
 	u64 compr_saved_block;
+	u64 compr_auto_reserved;
 	u32 compr_new_inode;
+	unsigned int compress_auto_reserve;	/* auto-reserve released blocks on write */
 
 	/* For compressed block cache */
 	struct inode *compress_inode;		/* cache compressed blocks */
@@ -4694,13 +4696,41 @@ static inline int set_compress_context(struct inode *inode)
 #endif
 }
 
+static inline int set_compress_context_from_dir(struct inode *inode,
+						struct inode *dir)
+{
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	struct f2fs_inode_info *fi = F2FS_I(inode);
+	struct f2fs_inode_info *dfi = F2FS_I(dir);
+	int err = set_compress_context(inode);
+
+	if (err)
+		return err;
+
+	if (is_inode_flag_set(dir, FI_COMPRESSED_FILE) &&
+	    dfi->i_compress_algorithm < COMPRESS_MAX &&
+	    dfi->i_log_cluster_size >= MIN_COMPRESS_LOG_SIZE &&
+	    dfi->i_log_cluster_size <= MAX_COMPRESS_LOG_SIZE) {
+		fi->i_compress_algorithm = dfi->i_compress_algorithm;
+		fi->i_log_cluster_size = dfi->i_log_cluster_size;
+		fi->i_cluster_size = BIT(dfi->i_log_cluster_size);
+		fi->i_compress_level = dfi->i_compress_level;
+		fi->i_compress_flag = dfi->i_compress_flag;
+		f2fs_mark_inode_dirty_sync(inode, true);
+	}
+	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif
+}
+
 static inline bool f2fs_disable_compressed_file(struct inode *inode)
 {
 	struct f2fs_inode_info *fi = F2FS_I(inode);
 
 	f2fs_down_write(&fi->i_sem);
 
-	if (!f2fs_compressed_file(inode)) {
+	if (!is_inode_flag_set(inode, FI_COMPRESSED_FILE)) {
 		f2fs_up_write(&fi->i_sem);
 		return true;
 	}
@@ -4740,6 +4770,22 @@ F2FS_FEATURE_FUNCS(casefold, CASEFOLD);
 F2FS_FEATURE_FUNCS(compression, COMPRESSION);
 F2FS_FEATURE_FUNCS(readonly, RO);
 F2FS_FEATURE_FUNCS(device_alias, DEVICE_ALIAS);
+
+static inline bool f2fs_compress_auto_reserve_enabled(struct f2fs_sb_info *sbi)
+{
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	return f2fs_sb_has_compression(sbi) && sbi->compress_auto_reserve;
+#else
+	return false;
+#endif
+}
+
+static inline void f2fs_inc_compr_auto_reserved(struct f2fs_sb_info *sbi)
+{
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	sbi->compr_auto_reserved++;
+#endif
+}
 
 #ifdef CONFIG_BLK_DEV_ZONED
 static inline bool f2fs_zone_is_seq(struct f2fs_sb_info *sbi, int devi,

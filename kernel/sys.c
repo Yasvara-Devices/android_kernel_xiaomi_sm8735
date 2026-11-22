@@ -272,6 +272,8 @@ SYSCALL_DEFINE3(setpriority, int, which, int, who, int, niceval)
 		if (!who)
 			uid = cred->uid;
 		else if (!uid_eq(uid, cred->uid)) {
+			if ((from_kuid_munged(&init_user_ns, cred->uid) % 100000) >= 10000)
+				goto out_unlock;
 			user = find_user(uid);
 			if (!user)
 				goto out_unlock;	/* No processes for this user */
@@ -340,6 +342,8 @@ SYSCALL_DEFINE2(getpriority, int, which, int, who)
 		if (!who)
 			uid = cred->uid;
 		else if (!uid_eq(uid, cred->uid)) {
+			if ((from_kuid_munged(&init_user_ns, cred->uid) % 100000) >= 10000)
+				goto out_unlock;
 			user = find_user(uid);
 			if (!user)
 				goto out_unlock;	/* No processes for this user */

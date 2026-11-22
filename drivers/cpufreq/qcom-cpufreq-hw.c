@@ -86,6 +86,11 @@ struct qcom_cpufreq_data {
 	bool per_core_dcvs;
 	unsigned long dcvsh_freq_limit;
 	struct device_attribute freq_limit_attr;
+
+	/* fused voltage curve, captured once for the uv_table export */
+	u32 uv_stock_mv[LUT_MAX_ENTRIES];
+	u32 uv_lval[LUT_MAX_ENTRIES];
+	u32 uv_nr_entries;
 };
 
 static unsigned long cpu_hw_rate, xo_rate;
@@ -106,6 +111,82 @@ static ssize_t show_hw_clk_domain(struct cpufreq_policy *policy, char *buf)
 }
 
 cpufreq_freq_attr_ro(hw_clk_domain);
+
+/*
+ * Voltage table introspection.
+ *
+ * EPSS drives VDD_APC on its own from a hardware LUT whose entries are plain
+ * millivolts.  The OPP voltages this driver registers are informational only
+ * on this target - no regulator is bound to the CPU devices and
+ * icc_scaling_enabled is false - so the LUT is the only thing that reflects
+ * what the part actually runs at.
+ *
+ * It is read-only to us: the LUT is programmed from CPRh fuses before EPSS is
+ * enabled and any write from HLOS takes the SoC down with a PS_HOLD hard
+ * reset, so this exports the curve and nothing more.
+ */
+static DEFINE_MUTEX(uv_lock);
+
+static u32 qcom_cpufreq_uv_read(struct qcom_cpufreq_data *data, u32 idx)
+{
+	const struct qcom_cpufreq_soc_data *sd = data->soc_data;
+
+	return FIELD_GET(LUT_VOLT,
+			 readl_relaxed(data->base + sd->reg_volt_lut +
+				       idx * sd->lut_row_size));
+}
+
+static void qcom_cpufreq_uv_capture(struct qcom_cpufreq_data *data)
+{
+	const struct qcom_cpufreq_soc_data *sd = data->soc_data;
+	u32 i, lval, prev_lval = 0;
+
+	if (data->uv_nr_entries)
+		return;
+
+	/* same end-of-table rule as qcom_cpufreq_hw_read_lut() */
+	for (i = 0; i < LUT_MAX_ENTRIES; i++) {
+		lval = FIELD_GET(LUT_L_VAL,
+				 readl_relaxed(data->base + sd->reg_freq_lut +
+					       i * sd->lut_row_size));
+		if (i && lval == prev_lval)
+			break;
+
+		data->uv_lval[i] = lval;
+		data->uv_stock_mv[i] = qcom_cpufreq_uv_read(data, i);
+		prev_lval = lval;
+	}
+
+	data->uv_nr_entries = i;
+}
+
+/*
+ * The frequency/voltage curve this part was fused with.  Values are re-read
+ * from the hardware on every show, and they are not identical across boots.
+ */
+static ssize_t show_uv_table(struct cpufreq_policy *policy, char *buf)
+{
+	struct qcom_cpufreq_data *data = policy->driver_data;
+	ssize_t len = 0;
+	u32 i;
+
+	if (!data || !data->uv_nr_entries)
+		return -EIO;
+
+	mutex_lock(&uv_lock);
+
+	len += scnprintf(buf + len, PAGE_SIZE - len, "idx  freq_khz  volt_mv\n");
+
+	for (i = 0; i < data->uv_nr_entries; i++)
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%3u  %8u  %7u\n",
+				 i, (u32)(xo_rate * data->uv_lval[i] / 1000),
+				 qcom_cpufreq_uv_read(data, i));
+
+	mutex_unlock(&uv_lock);
+
+	return len;
+}
+cpufreq_freq_attr_ro(uv_table);
 
 static int qcom_cpufreq_set_bw(struct cpufreq_policy *policy,
 			       unsigned long freq_khz)
@@ -773,6 +854,9 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 		data->base = base;
 		data->res = res;
 		data->hw_clk_domain = index;
+
+		if (sysfs_create_file(&policy->kobj, &uv_table.attr))
+			pr_warn("%s: cannot register uv_table sysfs file\n", __func__);
 	}
 
 	base = data->base;
@@ -786,6 +870,8 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 
 	if (readl_relaxed(base + data->soc_data->reg_dcvs_ctrl) & 0x1)
 		data->per_core_dcvs = true;
+
+	qcom_cpufreq_uv_capture(data);
 
 	qcom_get_related_cpus(index, policy->cpus);
 	if (cpumask_empty(policy->cpus)) {

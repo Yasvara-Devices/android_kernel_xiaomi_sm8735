@@ -411,6 +411,9 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 	if (!strcmp(a->attr.name, "compr_saved_block"))
 		return sysfs_emit(buf, "%llu\n", sbi->compr_saved_block);
 
+	if (!strcmp(a->attr.name, "compr_auto_reserved"))
+		return sysfs_emit(buf, "%llu\n", sbi->compr_auto_reserved);
+
 	if (!strcmp(a->attr.name, "compr_new_inode"))
 		return sysfs_emit(buf, "%u\n", sbi->compr_new_inode);
 #endif
@@ -750,6 +753,20 @@ out:
 		if (t != 0)
 			return -EINVAL;
 		sbi->compr_new_inode = 0;
+		return count;
+	}
+
+	if (!strcmp(a->attr.name, "compr_auto_reserved")) {
+		if (t != 0)
+			return -EINVAL;
+		sbi->compr_auto_reserved = 0;
+		return count;
+	}
+
+	if (!strcmp(a->attr.name, "compress_auto_reserve")) {
+		if (t > 1)
+			return -EINVAL;
+		*ui = t;
 		return count;
 	}
 
@@ -1246,7 +1263,9 @@ F2FS_SBI_GENERAL_RW_ATTR(max_fragment_hole);
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 F2FS_SBI_GENERAL_RW_ATTR(compr_written_block);
 F2FS_SBI_GENERAL_RW_ATTR(compr_saved_block);
+F2FS_SBI_GENERAL_RW_ATTR(compr_auto_reserved);
 F2FS_SBI_GENERAL_RW_ATTR(compr_new_inode);
+F2FS_SBI_GENERAL_RW_ATTR(compress_auto_reserve);
 F2FS_SBI_GENERAL_RW_ATTR(compress_percent);
 F2FS_SBI_GENERAL_RW_ATTR(compress_watermark);
 #endif
@@ -1444,7 +1463,9 @@ static struct attribute *f2fs_attrs[] = {
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	ATTR_LIST(compr_written_block),
 	ATTR_LIST(compr_saved_block),
+	ATTR_LIST(compr_auto_reserved),
 	ATTR_LIST(compr_new_inode),
+	ATTR_LIST(compress_auto_reserve),
 	ATTR_LIST(compress_percent),
 	ATTR_LIST(compress_watermark),
 #endif
