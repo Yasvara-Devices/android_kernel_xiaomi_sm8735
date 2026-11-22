@@ -9,6 +9,7 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/uaccess.h>
 #include <linux/seq_file.h>
 #include <linux/kthread.h>

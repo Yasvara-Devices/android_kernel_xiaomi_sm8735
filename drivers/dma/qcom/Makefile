@@ -9,4 +9,3 @@ hdma-objs        := hidma_ll.o hidma.o hidma_dbg.o
 
 # --- KP 5.0 soc-repo additions ---
 obj-$(CONFIG_MSM_GPI_DMA) += msm_gpi.o
-gpi-objs += gpi_fixed.o

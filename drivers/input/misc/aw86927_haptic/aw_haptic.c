@@ -1022,7 +1022,7 @@ static int awinic_i2c_probe(struct i2c_client *i2c)
 	if (gpio_is_valid(awinic->irq_gpio)) {
 		ret = devm_gpio_request_one(&i2c->dev, awinic->irq_gpio,
 
-					    GPIOF_DIR_IN, "awinic_int");
+					    GPIOF_IN, "awinic_int");
 
 		if (ret) {
 			aw_err("%s: int request failed, ret = %d\n", __func__,

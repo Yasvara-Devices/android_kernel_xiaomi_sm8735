@@ -3340,7 +3340,7 @@ static int sc96281_irq_init(struct sc96281 *chip)
 	// nirq init
 	if (gpio_is_valid(chip->irq_gpio)) {
 		/*
-        ret = gpio_request_one(chip->irq_gpio, GPIOF_DIR_IN,"sc96281_global_irq");
+        ret = gpio_request_one(chip->irq_gpio, GPIOF_IN,"sc96281_global_irq");
         if (ret) {
             mca_log_err("failed to request sc96281_global_irq\n");
             return -EINVAL;
@@ -3370,7 +3370,7 @@ static int sc96281_irq_init(struct sc96281 *chip)
 	// pg_irq init
 	if (gpio_is_valid(chip->power_good_gpio)) {
 		/*
-        ret = gpio_request_one(chip->power_good_gpio, GPIOF_DIR_IN,"sc96281_power_good_irq");
+        ret = gpio_request_one(chip->power_good_gpio, GPIOF_IN,"sc96281_power_good_irq");
         if (ret) {
             mca_log_err("failed to request sc96281_power_good_irq\n");
             return -EINVAL;

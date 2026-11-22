@@ -380,7 +380,7 @@ static int sih_acquire_prepare_res(struct device *dev, sih_haptic_t *sih_haptic)
 
 	if (gpio_is_valid(sih_haptic->chip_attr.irq_gpio)) {
 		ret = devm_gpio_request_one(dev, sih_haptic->chip_attr.irq_gpio,
-					    GPIOF_DIR_IN, "sih_haptic_irq");
+					    GPIOF_IN, "sih_haptic_irq");
 		if (ret) {
 			hp_err("%s:irq gpio request failed, ret = %d\n",
 			       __func__, ret);
@@ -1528,7 +1528,7 @@ static ssize_t auto_pvdd_store(struct device *dev,
 	if (rc < 0)
 		return rc;
 
-	rc = strtobool(buf, &val);
+	rc = kstrtobool(buf, &val);
 	if (rc < 0)
 		return rc;
 

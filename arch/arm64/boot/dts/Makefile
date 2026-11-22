@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
+vendor := $(src)/vendor
+ifeq "$(wildcard $(vendor)/Makefile)" ""
 subdir-y += actions
 subdir-y += airoha
 subdir-y += allwinner
@@ -34,9 +36,6 @@ subdir-y += tesla
 subdir-y += ti
 subdir-y += toshiba
 subdir-y += xilinx
-
-# --- KP 5.0 soc-repo additions ---
-vendor  := $(src)/vendor
-ifneq "$(wildcard $(vendor)/Makefile)" ""
+else
 subdir-y += vendor
 endif

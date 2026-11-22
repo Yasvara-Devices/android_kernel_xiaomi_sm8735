@@ -110,6 +110,9 @@ endif
 
 DTC_FLAGS += $(DTC_FLAGS_$(target-stem))
 
+# Forcibly set -@ for all DTB[O]s in case of QCOM targets
+DTC_FLAGS += -@
+
 # Set -@ if the target is a base DTB that overlay is applied onto
 DTC_FLAGS += $(if $(filter $(patsubst $(obj)/%,%,$@), $(base-dtb-y)), -@)
 
@@ -130,6 +133,9 @@ quiet_cmd_dtc = DTC $(quiet_dtb_check_tag) $@
 	$(cmd_dtb_check)
 
 $(obj)/%.dtb: $(obj)/%.dts $(DTC) $(DT_TMP_SCHEMA) FORCE
+	$(call if_changed_dep,dtc)
+
+$(obj)/%.dtbo: $(src)/%.dts $(DTC) FORCE
 	$(call if_changed_dep,dtc)
 
 $(obj)/%.dtbo: $(src)/%.dtso $(DTC) FORCE

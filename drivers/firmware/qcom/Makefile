@@ -5,7 +5,8 @@
 
 obj-$(CONFIG_QCOM_SCM)		+= qcom-scm.o
 qcom-scm-objs += qcom_scm.o qcom_scm-smc.o qcom_scm-legacy.o
-obj-$(CONFIG_QCOM_TZMEM)	+= qcom_tzmem.o
+qcom-scm-$(CONFIG_QCOM_TZMEM) += qcom_tzmem.o
+qcom-scm-$(CONFIG_QCOM_TZMEM_FFA) += qcom_tzmem_ffa.o
 obj-$(CONFIG_QCOM_QSEECOM)	+= qcom_qseecom.o
 obj-$(CONFIG_QCOM_QSEECOM_UEFISECAPP) += qcom_qseecom_uefisecapp.o
 

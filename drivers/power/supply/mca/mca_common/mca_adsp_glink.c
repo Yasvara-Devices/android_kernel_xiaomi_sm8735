@@ -10,6 +10,7 @@
 #include <linux/string.h>
 #include <linux/err.h>
 #include <linux/of_device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/soc/qcom/qti_pmic_glink.h>
 #include <mca/common/mca_log.h>
 #include <mca/common/mca_adsp_glink.h>

@@ -20,6 +20,7 @@
 #include <linux/device.h>
 #include <linux/firmware.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/version.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>

@@ -3,7 +3,7 @@
 ccflags-y += -I$(src)
 
 obj-$(CONFIG_QTI_MPAM) += mpam.o
-mpam-objs += mpam.o mpam_rpmsg.o
+mpam-objs += mpam_core.o mpam_rpmsg.o
 
 obj-$(CONFIG_QTI_CPU_MPAM_INTERFACE) += cpu_mpam.o
 
