@@ -122,3 +122,4 @@ obj-$(CONFIG_FUEL_GAUGE_MM8013)	+= mm8013.o
 obj-y += qcom/
 obj-$(CONFIG_QTI_BATTERY_CHARGER) += qti-battery-charger.o
 qti-battery-charger-objs += qti_battery_charger.o qti_charger_boost_lib.o qti_typec_class.o
+obj-$(CONFIG_XM_POWER_SUPPLY) += mca/

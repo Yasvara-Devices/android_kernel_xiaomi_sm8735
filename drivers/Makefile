@@ -201,3 +201,4 @@ obj-y += eom/
 obj-y += eom/pcie/
 obj-y += powercap/qcom/
 obj-y += uio/msm_sharedmem/
+obj-y += xiaomi/

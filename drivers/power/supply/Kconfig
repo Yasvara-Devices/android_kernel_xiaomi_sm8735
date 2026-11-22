@@ -1018,6 +1018,13 @@ config FUEL_GAUGE_MM8013
 	  the state of charge, temperature, cycle count, actual and design
 	  capacity, etc.
 
+config XM_POWER_SUPPLY
+	tristate "Xiaomi power supply config"
+	help
+	  Say Y or M here to enable xiaomi power supply
+
+source "drivers/power/supply/mca/Kconfig"
+
 endif # POWER_SUPPLY
 
 # --- KP 5.0 soc-repo additions ---

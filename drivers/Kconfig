@@ -249,4 +249,6 @@ source "drivers/eom/Kconfig"
 
 source "drivers/eom/pcie/Kconfig"
 
+source "drivers/xiaomi/Kconfig"
+
 endmenu

@@ -95,3 +95,5 @@ obj-$(CONFIG_INPUT_IDEAPAD_SLIDEBAR)	+= ideapad_slidebar.o
 
 # --- KP 5.0 soc-repo additions ---
 obj-$(CONFIG_INPUT_QCOM_HV_HAPTICS) += qcom-hv-haptics.o
+obj-$(CONFIG_INPUT_AW86927_HAPTIC) += aw86927_haptic/
+obj-$(CONFIG_SIH_VIBRATOR) += si_haptic/

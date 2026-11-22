@@ -743,5 +743,7 @@ config SLG4DC_SIGNAL_IC
 
 	  Say Y if you want to enable SLG4DC driver.
 
+source "drivers/misc/hwid/Kconfig"
+source "drivers/misc/miev/Kconfig"
 
 endmenu

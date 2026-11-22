@@ -1927,6 +1927,13 @@ config GPIO_VIRTUSER
 	  This driver is aimed as a helper in spotting any regressions in
 	  hot-unplug handling in GPIOLIB.
 
+config MI_T1_CHIP
+	tristate "Mi T1 chip"
+	depends on QCOM_RPROC_COMMON || (QCOM_RPROC_COMMON=n && COMPILE_TEST)
+	default n
+	help
+	  This adds support for Mi T1 chip.
+
 endmenu
 
 endif
