@@ -117,3 +117,8 @@ obj-$(CONFIG_CHARGER_SURFACE)	+= surface_charger.o
 obj-$(CONFIG_BATTERY_UG3105)	+= ug3105_battery.o
 obj-$(CONFIG_CHARGER_QCOM_SMB2)	+= qcom_pmi8998_charger.o
 obj-$(CONFIG_FUEL_GAUGE_MM8013)	+= mm8013.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-y += qcom/
+obj-$(CONFIG_QTI_BATTERY_CHARGER) += qti-battery-charger.o
+qti-battery-charger-objs += qti_battery_charger.o qti_charger_boost_lib.o qti_typec_class.o

@@ -245,4 +245,8 @@ source "drivers/cdx/Kconfig"
 
 source "drivers/dpll/Kconfig"
 
+source "drivers/eom/Kconfig"
+
+source "drivers/eom/pcie/Kconfig"
+
 endmenu

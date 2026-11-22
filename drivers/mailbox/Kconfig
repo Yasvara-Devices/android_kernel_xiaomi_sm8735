@@ -296,3 +296,14 @@ config QCOM_IPCC
 	  Say Y here if you want to build this driver.
 
 endif
+
+# --- KP 5.0 soc-repo additions ---
+
+config MSM_QMP
+	tristate "QTI Mailbox Protocol(QMP)"
+	help
+	  Say yes to add support for the QTI Mailbox Protocol mailbox driver.
+	  QMP is a lightweight communication protocol for sending messages to
+	  a remote processor. This protocol fits into the Generic Mailbox
+	  Framework. QMP uses a mailbox located in shared memory.
+

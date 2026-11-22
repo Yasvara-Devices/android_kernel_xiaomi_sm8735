@@ -39,3 +39,6 @@ obj-y					+= allwinner/	\
 					   tegra/	\
 					   ti/		\
 					   xilinx/
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_PHY_NXP_PTN3222) += phy-nxp-ptn3222.o

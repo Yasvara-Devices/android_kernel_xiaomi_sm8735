@@ -215,3 +215,20 @@ config EXTCON_RTK_TYPE_C
 	  This driver will detect the status of the type-c port.
 
 endif
+
+# --- KP 5.0 soc-repo additions ---
+
+config EXTCON_QTI_SPMI_MISC
+	tristate "Qualcomm USB extcon support"
+	depends on ARCH_QCOM || COMPILE_TEST
+	help
+	  Say Y here to enable SPMI PMIC based USB cable detection
+	  support on Qualcomm PMICs such as PM8941.
+
+	  This driver provides USB ID and VBUS detection support through
+	  the extcon framework. It handles USB host/device role switching
+	  by monitoring the USB ID pin and VBUS line states.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called extcon-qti-spmi-misc.
+

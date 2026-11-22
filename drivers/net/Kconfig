@@ -669,3 +669,17 @@ config NETDEV_LEGACY_INIT
 	  symbol, everything else no longer needs it.
 
 endif # NETDEVICES
+
+# --- KP 5.0 soc-repo additions ---
+source "drivers/net/mdio_fe/Kconfig"
+
+config VIRTIO_NET_DISABLE_F_DEVICE_STATS
+	bool "Disable/Enable F_DEVICE_STATS bit in Virtio network driver"
+	depends on VIRTIO_NET
+	help
+	  This config will disable or enable F_DEVICE_STATS bit in the
+	  VirtIO-based network driver. Disabling this bit can avoid
+	  crashes caused by QNX VirtIO-based network backend driver
+	  using F_DEVICE_STATS bit value for other function.
+	  Say Y or N.
+

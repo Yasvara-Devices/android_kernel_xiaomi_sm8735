@@ -56,3 +56,5 @@ source "drivers/virt/gunyah/Kconfig"
 source "drivers/virt/halla/Kconfig"
 
 endif
+
+# --- KP 5.0 soc-repo additions ---

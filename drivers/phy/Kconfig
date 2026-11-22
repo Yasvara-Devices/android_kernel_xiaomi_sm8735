@@ -111,4 +111,17 @@ source "drivers/phy/ti/Kconfig"
 source "drivers/phy/intel/Kconfig"
 source "drivers/phy/xilinx/Kconfig"
 
+# --- KP 5.0 soc-repo additions ---
+
+config PHY_NXP_PTN3222
+        tristate "NXP PTN3222 1-port eUSB2 to USB2 redriver"
+        depends on I2C
+        depends on OF
+        select GENERIC_PHY
+        help
+          Enable this to support NXP PTN3222 1-port eUSB2 to USB2 Redriver.
+          This redriver performs translation between eUSB2 and USB2 signalling
+          schemes. It supports all three USB 2.0 data rates: Low Speed, Full
+          Speed and High Speed.
+
 endmenu

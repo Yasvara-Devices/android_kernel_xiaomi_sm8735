@@ -18,3 +18,12 @@ obj-$(CONFIG_STM_SOURCE_FTRACE)		+= stm_ftrace.o
 stm_console-y		:= console.o
 stm_heartbeat-y		:= heartbeat.o
 stm_ftrace-y		:= ftrace.o
+
+# --- KP 5.0 soc-repo additions ---
+stm_console-objs += console.o
+stm_core-objs += core.o policy.o
+stm_ftrace-objs += ftrace.o
+stm_heartbeat-objs += heartbeat.o
+obj-$(CONFIG_STM_PROTO_OST) += stm_p_ost.o
+stm_p_ost-objs += p_ost.o
+obj-$(CONFIG_STM_PASSTHROUGH) += stm_passthrough.o

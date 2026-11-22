@@ -4,3 +4,6 @@ obj-$(CONFIG_AT803X_PHY)	+= at803x.o
 obj-$(CONFIG_QCA83XX_PHY)	+= qca83xx.o
 obj-$(CONFIG_QCA808X_PHY)	+= qca808x.o
 obj-$(CONFIG_QCA807X_PHY)	+= qca807x.o
+
+# --- KP 5.0 soc-repo additions ---
+qca808x-objs += qca808x.o qcom-phy-lib.o

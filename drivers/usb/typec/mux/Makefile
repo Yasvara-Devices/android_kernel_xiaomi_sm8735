@@ -8,3 +8,6 @@ obj-$(CONFIG_TYPEC_MUX_IT5205)		+= it5205.o
 obj-$(CONFIG_TYPEC_MUX_NB7VPQ904M)	+= nb7vpq904m.o
 obj-$(CONFIG_TYPEC_MUX_PTN36502)	+= ptn36502.o
 obj-$(CONFIG_TYPEC_MUX_WCD939X_USBSS)	+= wcd939x-usbss.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_TYPEC_MUX_PS883X) += ps883x.o

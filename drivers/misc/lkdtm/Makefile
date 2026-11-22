@@ -23,3 +23,7 @@ OBJCOPYFLAGS_rodata_objcopy.o	:= \
 targets += rodata.o rodata_objcopy.o
 $(obj)/rodata_objcopy.o: $(obj)/rodata.o FORCE
 	$(call if_changed,objcopy)
+
+# --- KP 5.0 soc-repo additions ---
+lkdtm-objs += core.o bugs.o heap.o perms.o refcount.o rodata_objcopy.o usercopy.o stackleak.o cfi.o fortify.o
+lkdtm-$(CONFIG_PPC_64S_HASH_MMU) += powerpc.o

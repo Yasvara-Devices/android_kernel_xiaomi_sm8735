@@ -41,3 +41,6 @@ obj-y += analogix/
 obj-y += cadence/
 obj-y += imx/
 obj-y += synopsys/
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_DRM_LT9611UXC) += lt9611uxc.o

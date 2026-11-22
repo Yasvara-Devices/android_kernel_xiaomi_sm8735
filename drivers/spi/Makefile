@@ -160,3 +160,9 @@ obj-$(CONFIG_SPI_AMD)			+= spi-amd.o
 # SPI slave protocol handlers
 obj-$(CONFIG_SPI_SLAVE_TIME)		+= spi-slave-time.o
 obj-$(CONFIG_SPI_SLAVE_SYSTEM_CONTROL)	+= spi-slave-system-control.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_Q2SPI_MSM_GENI) += q2spi-geni.o
+q2spi-geni-objs += q2spi-gsi.o q2spi-msm-geni.o
+obj-$(CONFIG_SPI_MSM_GENI) += spi-msm-geni.o
+obj-$(CONFIG_SPI_QCOM_GENI_MSM) += spi-geni-qcom-msm.o

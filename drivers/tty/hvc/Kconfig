@@ -134,3 +134,25 @@ config HVCS
 	  will depend on arch specific APIs exported from hvcserver.ko
 	  which will also be compiled when this driver is built as a
 	  module.
+
+# --- KP 5.0 soc-repo additions ---
+
+config HVC_GUNYAH
+	  tristate "Gunyah tty support"
+	  depends on GH_RM_DRV
+	  select HVC_DRIVER
+	  help
+	  This console exposes communication with other
+	  virtual machines in the Gunyah hypervisor. This
+	  option may also be used as an early console
+	  to another VM.
+
+
+config HVC_GUNYAH_CONSOLE
+	  bool "Gunyah console support"
+	  depends on HVC_GUNYAH
+	  help
+	  Select this option to allow Gunyah tty
+	  as an boot console communicating with
+	  the primary VM. Still need to specify
+	  earlycon and console parameters.

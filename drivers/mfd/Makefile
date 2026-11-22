@@ -289,3 +289,6 @@ obj-$(CONFIG_MFD_ATC260X_I2C)	+= atc260x-i2c.o
 
 obj-$(CONFIG_MFD_RSMU_I2C)	+= rsmu_i2c.o rsmu_core.o
 obj-$(CONFIG_MFD_RSMU_SPI)	+= rsmu_spi.o rsmu_core.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_MFD_I2C_PMIC) += qcom-i2c-pmic.o

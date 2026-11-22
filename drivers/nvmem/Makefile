@@ -83,3 +83,9 @@ obj-$(CONFIG_NVMEM_ZYNQMP)		+= nvmem_zynqmp_nvmem.o
 nvmem_zynqmp_nvmem-y			:= zynqmp_nvmem.o
 obj-$(CONFIG_NVMEM_QORIQ_EFUSE)		+= nvmem-qoriq-efuse.o
 nvmem-qoriq-efuse-y			:= qoriq-efuse.o
+
+# --- KP 5.0 soc-repo additions ---
+nvmem_qcom-spmi-sdam-objs += qcom-spmi-sdam.o
+nvmem_qfprom-objs += qfprom.o
+obj-$(CONFIG_NVMEM_LAYOUT_QCOM_ETH_MAC) += nvmem_layout_qcom_eth_mac.o
+nvmem_layout_qcom_eth_mac-objs += layouts/qcom-eth-mac.o

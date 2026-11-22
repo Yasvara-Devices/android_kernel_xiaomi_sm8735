@@ -51,3 +51,17 @@ coresight-cti-y := coresight-cti-core.o	coresight-cti-platform.o \
 		   coresight-cti-sysfs.o
 obj-$(CONFIG_ULTRASOC_SMB) += ultrasoc-smb.o
 obj-$(CONFIG_CORESIGHT_DUMMY) += coresight-dummy.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_CORESIGHT_CSR) += coresight-csr.o
+coresight-cti-objs += coresight-cti-core.o coresight-cti-platform.o coresight-cti-sysfs.o
+coresight-etm4x-objs += coresight-etm4x-cfg.o coresight-etm4x-core.o coresight-etm4x-sysfs.o
+coresight-objs += coresight-cfg-afdo.o coresight-cfg-preload.o coresight-config.o coresight-core.o coresight-etm-perf.o coresight-platform.o coresight-syscfg-configfs.o coresight-syscfg.o coresight-sysfs.o coresight-trace-id.o
+obj-$(CONFIG_CORESIGHT_QMI) += coresight-qmi.o
+obj-$(CONFIG_CORESIGHT_REMOTE_ETM) += coresight-remote-etm.o
+obj-$(CONFIG_CORESIGHT_LINKS_AND_SINKS) += coresight-replicator.o
+obj-$(CONFIG_CORESIGHT_TGU) += coresight-tgu.o
+coresight-tmc-objs += coresight-byte-cntr.o coresight-tmc-core.o coresight-tmc-etf.o coresight-tmc-etr.o coresight-tmc-usb.o
+obj-$(CONFIG_CORESIGHT_REMOTE_ETM) += coresight-tmc-sec.o
+obj-$(CONFIG_CORESIGHT_TRACE_NOC) += coresight-trace-noc.o
+obj-$(CONFIG_CORESIGHT_UETM) += coresight-uetm.o

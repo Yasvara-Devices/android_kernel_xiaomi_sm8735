@@ -36,3 +36,9 @@ obj-$(CONFIG_SND_USB_US122L) += snd-usbmidi-lib.o
 
 obj-$(CONFIG_SND) += misc/ usx2y/ caiaq/ 6fire/ hiface/ bcd2000/
 obj-$(CONFIG_SND_USB_LINE6)	+= line6/
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_SND_USB_AUDIO_QMI) += snd-usb-audio-qmi.o
+snd-usb-audio-qmi-objs += usb_audio_qmi_svc.o usb_audio_qmi_v01.o
+obj-$(CONFIG_SND_USB_AUDIO_QMI_1IR) += snd-usb-audio-qmi_1ir.o
+snd-usb-audio-qmi_1ir-objs += usb_audio_qmi_1ir_svc.o usb_audio_qmi_v01.o

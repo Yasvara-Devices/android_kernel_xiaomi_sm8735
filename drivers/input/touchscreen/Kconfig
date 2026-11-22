@@ -1389,3 +1389,14 @@ config TOUCHSCREEN_HIMAX_HX83112B
 	  module will be called himax_hx83112b.
 
 endif
+
+# --- KP 5.0 soc-repo additions ---
+
+config TOUCHSCREEN_CAP1296
+        tristate "touch driver for cap1296"
+        help
+          The CAP1296 is a multiple channel capacitive touch
+          sensor controller. It contains six (6) individual capaci-
+          tive touch sensor inputs with programmable sensitivity
+          for use in touch sensor applications.
+

@@ -64,3 +64,6 @@ obj-$(CONFIG_SPRD_MBOX)		+= sprd-mailbox.o
 obj-$(CONFIG_QCOM_CPUCP_MBOX)	+= qcom-cpucp-mbox.o
 
 obj-$(CONFIG_QCOM_IPCC)		+= qcom-ipcc.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_MSM_QMP) += msm_qmp.o

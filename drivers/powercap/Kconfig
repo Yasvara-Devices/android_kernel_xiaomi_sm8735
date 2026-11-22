@@ -93,4 +93,6 @@ config DTPM_DEVFREQ
 	help
 	  This enables support for device power limitation based on
 	  energy model.
+
+source "drivers/powercap/qcom/Kconfig"
 endif

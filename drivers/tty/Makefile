@@ -29,3 +29,6 @@ obj-$(CONFIG_VCC)		+= vcc.o
 obj-$(CONFIG_RPMSG_TTY)		+= rpmsg_tty.o
 
 obj-y += ipwireless/
+
+# --- KP 5.0 soc-repo additions ---
+obj-y += serial/pkvm-geni/

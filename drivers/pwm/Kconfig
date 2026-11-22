@@ -746,3 +746,16 @@ config PWM_XILINX
 	  will be called pwm-xilinx.
 
 endif
+
+# --- KP 5.0 soc-repo additions ---
+
+config PWM_QCOM
+	tristate "Qualcomm Technologies, Inc. PWM support"
+	depends on ARCH_QCOM
+	help
+	  Generic PWM framework driver for the PWM controller found on
+	  Qualcomm Technologies Inc. SoCs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-qcom.
+

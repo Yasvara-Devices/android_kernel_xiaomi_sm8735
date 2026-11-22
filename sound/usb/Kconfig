@@ -180,3 +180,25 @@ source "sound/usb/line6/Kconfig"
 
 endif	# SND_USB
 
+
+# --- KP 5.0 soc-repo additions ---
+
+config SND_USB_AUDIO_QMI
+	tristate "USB Audio QMI Service driver"
+	depends on QCOM_QMI_HELPERS && SND_USB_AUDIO
+	help
+	  Starts USB Audio QMI server to communicate with remote entity
+	  to perform operations like enable or disable particular audio
+	  stream on a connected USB device, subsystem restart and
+	  device disconnect.
+
+
+config SND_USB_AUDIO_QMI_1IR
+	tristate "USB Audio QMI One interrupter Service driver"
+	depends on QCOM_QMI_HELPERS && SND_USB_AUDIO
+	help
+	  Starts USB Audio QMI server to communicate with remote entity
+	  to perform operations like enable or disable particular audio
+	  stream on a connected USB device, subsystem restart and
+	  device disconnect. This is one interrupter supported version.
+

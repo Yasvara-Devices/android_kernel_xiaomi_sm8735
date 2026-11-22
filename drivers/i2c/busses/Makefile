@@ -160,3 +160,7 @@ obj-$(CONFIG_I2C_FSI)		+= i2c-fsi.o
 obj-$(CONFIG_I2C_VIRTIO)	+= i2c-virtio.o
 
 ccflags-$(CONFIG_I2C_DEBUG_BUS) := -DDEBUG
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_I2C_MSM_GENI) += i2c-msm-geni.o
+obj-$(CONFIG_I2C_QCOM_GENI_MSM) += i2c-qcom-geni-msm.o

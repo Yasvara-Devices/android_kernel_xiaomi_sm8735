@@ -23,3 +23,5 @@ config INTERCONNECT_CLK
 	  Support for wrapping clocks into the interconnect nodes.
 
 endif
+
+# --- KP 5.0 soc-repo additions ---

@@ -239,3 +239,8 @@ obj-$(CONFIG_SENSORS_PECI)	+= peci/
 obj-$(CONFIG_PMBUS)		+= pmbus/
 
 ccflags-$(CONFIG_HWMON_DEBUG_CHIP) := -DDEBUG
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_SENSORS_QTI_AMOLED_ECM) += qti_amoled_ecm.o
+obj-$(CONFIG_SENSORS_QTI_BTL) += qti_btl.o
+obj-$(CONFIG_QTI_BATT_TELEMETRY) += qti_batt_telemetry.o

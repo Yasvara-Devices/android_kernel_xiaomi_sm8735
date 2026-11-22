@@ -68,3 +68,9 @@ obj-$(CONFIG_USBIP_CORE)	+= usbip/
 obj-$(CONFIG_TYPEC)		+= typec/
 
 obj-$(CONFIG_USB_ROLE_SWITCH)	+= roles/
+
+# --- KP 5.0 soc-repo additions ---
+obj-y += extcon/
+obj-y += pd/
+obj-y += redriver/
+obj-y += repeater/

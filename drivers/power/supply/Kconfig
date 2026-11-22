@@ -1019,3 +1019,31 @@ config FUEL_GAUGE_MM8013
 	  capacity, etc.
 
 endif # POWER_SUPPLY
+
+# --- KP 5.0 soc-repo additions ---
+source "drivers/power/supply/qcom/Kconfig"
+
+config QTI_BATTERY_CHARGER
+	tristate "QTI Glink battery charger"
+	depends on QTI_PMIC_GLINK && EXTCON && TYPEC
+	help
+	  Say Y here to enable Qualcomm Technologies, Inc. battery charger
+	  driver which interfaces with the charger firmware running on the
+	  remote subsystem (e.g. DSP) by communicating over PMIC Glink channel
+	  and provides information about the battery, USB and wireless charging
+	  by exposing them as power supply devices.
+
+	  To compile the driver as a module, choose M here: the module will be
+	  called qti_battery_charger.
+
+
+config QTI_CHARGER_NFC_VREG
+	bool "Allow client to vote on Charger reverse boost regulator"
+	depends on QTI_BATTERY_CHARGER
+	help
+	  Say 'y' here to allow client drivers to enable and perform voltage
+	  get/set operations via the regulator framework on the charger reverse
+	  boost regulator. This may be used by client drivers such as NFC
+	  to manage their power supply requirements through the charger’s
+	  reverse boost regulator.
+

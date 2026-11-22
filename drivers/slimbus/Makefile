@@ -11,3 +11,7 @@ slim-qcom-ctrl-y			:= qcom-ctrl.o
 
 obj-$(CONFIG_SLIM_QCOM_NGD_CTRL)	+= slim-qcom-ngd-ctrl.o
 slim-qcom-ngd-ctrl-y			:= qcom-ngd-ctrl.o
+
+# --- KP 5.0 soc-repo additions ---
+slimbus-objs += core.o messaging.o sched.o stream.o
+slim-qcom-ngd-ctrl-objs += qcom-ngd-ctrl.o

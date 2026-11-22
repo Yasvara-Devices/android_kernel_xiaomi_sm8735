@@ -63,3 +63,8 @@ obj-$(CONFIG_ARM64) += pci-thunder-pem.o
 obj-$(CONFIG_ARM64) += pci-xgene.o
 endif
 endif
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_PCI_MSM) += pci-msm-drv.o
+pci-msm-drv-objs += pci-msm-msi.o pci-msm.o
+obj-$(CONFIG_PCIE_QCOM_ECAM) += pcie-qcom-ecam.o

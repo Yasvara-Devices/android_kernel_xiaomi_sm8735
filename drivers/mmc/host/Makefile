@@ -111,3 +111,6 @@ endif
 
 obj-$(CONFIG_MMC_SDHCI_XENON)	+= sdhci-xenon-driver.o
 sdhci-xenon-driver-y		+= sdhci-xenon.o sdhci-xenon-phy.o
+
+# --- KP 5.0 soc-repo additions ---
+cqhci-$(CONFIG_MMC_CRYPTO_QTI) += cqhci-crypto-qti.o

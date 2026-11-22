@@ -101,3 +101,7 @@ obj-$(CONFIG_KGDB_SERIAL_CONSOLE) += kgdboc.o
 obj-$(CONFIG_SERIAL_NUVOTON_MA35D1) += ma35d1_serial.o
 
 obj-$(CONFIG_SERIAL_PKVM_PL011) += pkvm-pl011/
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_SERIAL_MSM_GENI) += msm_geni_serial.o
+obj-$(CONFIG_SERIAL_QCOM_GENI_MSM) += qcom_geni_serial_msm.o

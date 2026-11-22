@@ -32,3 +32,7 @@ obj-$(CONFIG_DWC_PCIE_PMU) += dwc_pcie_pmu.o
 obj-$(CONFIG_ARM_CORESIGHT_PMU_ARCH_SYSTEM_PMU) += arm_cspmu/
 obj-$(CONFIG_MESON_DDR_PMU) += amlogic/
 obj-$(CONFIG_CXL_PMU) += cxl_pmu.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_QCOM_LLCC_PMU) += qcom_llcc_pmu.o
+obj-$(CONFIG_ARM_SMMU_PMU) += arm_smmu_pmu.o

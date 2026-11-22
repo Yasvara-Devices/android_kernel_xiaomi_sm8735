@@ -203,3 +203,5 @@ source "drivers/net/ethernet/xilinx/Kconfig"
 source "drivers/net/ethernet/xircom/Kconfig"
 
 endif # ETHERNET
+
+# --- KP 5.0 soc-repo additions ---

@@ -40,3 +40,9 @@ obj-$(CONFIG_TI_K3_DSP_REMOTEPROC)	+= ti_k3_dsp_remoteproc.o
 obj-$(CONFIG_TI_K3_M4_REMOTEPROC)	+= ti_k3_m4_remoteproc.o
 obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o
 obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_QCOM_SPSS) += qcom_spss.o
+obj-$(CONFIG_QCOM_RPROC_COMMON) += rproc_qcom_common.o
+rproc_qcom_common-objs += qcom_common.o qcom_tracepoints.o
+obj-$(CONFIG_QCOM_RPROC_SLATE)               += qcom_rproc_slate.o

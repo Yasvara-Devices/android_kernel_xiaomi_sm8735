@@ -2616,3 +2616,46 @@ config SENSORS_HP_WMI
 endif # ACPI
 
 endif # HWMON
+
+# --- KP 5.0 soc-repo additions ---
+
+config SENSORS_QTI_AMOLED_ECM
+	tristate "Qualcomm Technologies, Inc. AMOLED Current Monitor"
+	depends on SPMI
+	help
+	  Qualcomm Technologies, Inc. ECM driver supports measurement of
+	  OLED display power with a time granularity in sub-frame or
+	  multiple frames of image data. The measurement can be for a short
+	  period (N frames) or a long period (continuous mode).
+
+	  To compile this driver as module, choose M here: the module will
+	  be called qti_amoled_ecm.
+
+
+config SENSORS_QTI_BTL
+	tristate "Qualcomm Technologies, Inc. Battery Temperature Logging"
+	depends on SPMI
+	help
+	  Qualcomm Technologies, Inc. Battery temperature logging driver
+	  supports reading back how long device spends within a given
+	  set of temperature ranges.
+
+	  To compile this driver as module, choose M here: the module will
+	  be called qti_btl.
+
+
+config QTI_BATT_TELEMETRY
+	tristate "Qualcomm Technologies, Inc. Battery Telemetry Driver"
+	depends on QTI_PMIC_GLINK
+	help
+	  Enable this driver to support battery voltage and current
+	  telemetry data transport from remote sub-system to APPS via
+	  pmic_glink GLink channel on Qualcomm Technologies, Inc. platforms.
+
+	  The driver exposes a sysfs interface allowing userspace to
+	  start/stop sampling and read raw binary telemetry sample
+	  data in a single read call.
+
+	  Say Y or M if you are building for a Qualcomm Technologies, Inc.
+	  platform that supports battery telemetry via remote subsystem.
+

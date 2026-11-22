@@ -21,3 +21,6 @@ obj-$(CONFIG_PTP_1588_CLOCK_MOCK)	+= ptp_mock.o
 obj-$(CONFIG_PTP_1588_CLOCK_VMW)	+= ptp_vmw.o
 obj-$(CONFIG_PTP_1588_CLOCK_OCP)	+= ptp_ocp.o
 obj-$(CONFIG_PTP_DFL_TOD)		+= ptp_dfl_tod.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_PTP_QCOM_CLOCK_TSC_VM) += ptp_qcom_tsc_vm.o

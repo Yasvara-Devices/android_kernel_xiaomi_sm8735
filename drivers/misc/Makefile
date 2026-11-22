@@ -74,3 +74,14 @@ obj-$(CONFIG_MARVELL_CN10K_DPI)	+= mrvl_cn10k_dpi.o
 obj-y				+= keba/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_PKVM_SMC_FILTER)  += pkvm-smc/
+
+# --- KP 5.0 soc-repo additions ---
+obj-y += fl7112/
+obj-y += isl97900_led/
+obj-$(CONFIG_QSEECOM_PROXY) += qseecom_proxy.o
+obj-$(CONFIG_BOOTMARKER_PROXY) += bootmarker_proxy.o
+obj-$(CONFIG_QTI_FASTRPC) += frpc-adsprpc.o
+frpc-adsprpc-objs += fastrpc.o
+obj-$(CONFIG_TPS6286_STEP_DOWN_CONV) += tps6286.o
+obj-$(CONFIG_INA234_CURRENT_MONITOR) += ina234b.o
+obj-$(CONFIG_SLG4DC_SIGNAL_IC) += slg4dc.o

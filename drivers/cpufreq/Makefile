@@ -113,3 +113,7 @@ obj-$(CONFIG_LOONGSON3_CPUFREQ)		+= loongson3_cpufreq.o
 obj-$(CONFIG_SH_CPU_FREQ)		+= sh-cpufreq.o
 obj-$(CONFIG_SPARC_US2E_CPUFREQ)	+= sparc-us2e-cpufreq.o
 obj-$(CONFIG_SPARC_US3_CPUFREQ)		+= sparc-us3-cpufreq.o
+
+# --- KP 5.0 soc-repo additions ---
+obj-$(CONFIG_ARM_QCOM_CPUFREQ_THERMAL) += qcom-cpufreq-thermal.o
+obj-$(CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG) += qcom-cpufreq-hw-debug.o

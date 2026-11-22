@@ -195,3 +195,9 @@ obj-$(CONFIG_CDX_BUS)		+= cdx/
 obj-$(CONFIG_DPLL)		+= dpll/
 
 obj-$(CONFIG_S390)		+= s390/
+
+# --- KP 5.0 soc-repo additions ---
+obj-y += eom/
+obj-y += eom/pcie/
+obj-y += powercap/qcom/
+obj-y += uio/msm_sharedmem/

@@ -7,3 +7,6 @@
 
 source "drivers/bus/mhi/host/Kconfig"
 source "drivers/bus/mhi/ep/Kconfig"
+
+# --- KP 5.0 soc-repo additions ---
+source "drivers/bus/mhi/devices/Kconfig"

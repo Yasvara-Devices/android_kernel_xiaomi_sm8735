@@ -15,3 +15,6 @@ obj-$(CONFIG_VIRTIO_VDPA) += virtio_vdpa.o
 obj-$(CONFIG_VIRTIO_MEM) += virtio_mem.o
 obj-$(CONFIG_VIRTIO_DMA_SHARED_BUFFER) += virtio_dma_buf.o
 obj-$(CONFIG_VIRTIO_DEBUG) += virtio_debug.o
+
+# --- KP 5.0 soc-repo additions ---
+virtio_mem-objs += virtio_mem.o qti_virtio_mem.o
