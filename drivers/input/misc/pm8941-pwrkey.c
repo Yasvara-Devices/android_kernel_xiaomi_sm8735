@@ -179,6 +179,9 @@ static int pm8941_reboot_notify(struct notifier_block *nb,
 typedef int (*mi_display_pwrkey_callback)(int);
 static mi_display_pwrkey_callback mi_display_pwrkey_cb;
 
+RAW_NOTIFIER_HEAD(pwrkey_irq_notifier_list);
+EXPORT_SYMBOL_GPL(pwrkey_irq_notifier_list);
+
 void mi_display_pwrkey_callback_set(mi_display_pwrkey_callback cb)
 {
 	mi_display_pwrkey_cb = cb;
@@ -199,8 +202,13 @@ static irqreturn_t pm8941_pwrkey_irq(int irq, void *_data)
 		if (err)
 			return IRQ_HANDLED;
 		sts &= pwrkey->data->status_bit;
-		if (sts && mi_display_pwrkey_cb)
-			mi_display_pwrkey_cb(PMIC_PWRKEY_BARK_TRIGGER);
+		if (sts) {
+			if (mi_display_pwrkey_cb)
+				mi_display_pwrkey_cb(PMIC_PWRKEY_BARK_TRIGGER);
+			if (!strcmp(pwrkey->data->name, "pmic_pwrkey_bark"))
+				raw_notifier_call_chain(&pwrkey_irq_notifier_list,
+							0, NULL);
+		}
 		if (!strcmp(pwrkey->data->name, "pmic_pwrkey_bark"))
 			return IRQ_HANDLED;
 	}
