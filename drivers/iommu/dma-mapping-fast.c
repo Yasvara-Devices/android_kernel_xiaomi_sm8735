@@ -1095,6 +1095,7 @@ static void __fast_smmu_setup_dma_ops(void *data, struct device *dev)
 	}
 
 	fast_smmu_reserve_iommu_regions(dev, fast);
+	dev->dma_iommu = false;
 	dev->dma_ops = &fast_smmu_dma_ops;
 }
 
