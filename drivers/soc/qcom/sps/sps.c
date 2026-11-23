@@ -2708,7 +2708,7 @@ static const struct of_device_id msm_sps_match[] = {
 		.data = &bam_types[SPS_BAM_NDP]
 	},
 	{	.compatible = "qcom,msm-sps-4k",
-		.data = &bam_types[SPS_BAM_NDP_4K]
+		.data = &bam_types[SPS_BAM_NDP_V1_7_4K]
 	},
 	{	.compatible = "qcom,msm-sps-v1_7-4k",
 		.data = &bam_types[SPS_BAM_NDP_V1_7_4K]
