@@ -987,6 +987,7 @@ static void regdb_fw_cb(const struct firmware *fw, void *context)
 
 	if (!fw) {
 		pr_info("failed to load regulatory.db, falling back to unlocked world domain\n");
+		set_error = -ENODATA;
 	} else if (!valid_regdb(fw->data, fw->size)) {
 		pr_info("loaded regulatory.db is malformed or signature is missing/invalid\n");
 		set_error = -EINVAL;
