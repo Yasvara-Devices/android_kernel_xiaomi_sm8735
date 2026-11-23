@@ -1755,7 +1755,10 @@ static struct clk_branch gcc_gpu_gemnoc_gfx_clk = {
 
 static struct clk_branch gcc_gpu_gpll0_cph_clk_src = {
 	.halt_reg = 0x71150,
-	.halt_check = BRANCH_HALT_ENABLE_VOTED,
+	/* Voted GPLL0 feed. Its CBCR never reports the expected halt bit on 6.12,
+	 * so GMU clock enable times out and Adreno never starts.
+	 */
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x71150,
 		.enable_mask = BIT(0),
@@ -1773,7 +1776,7 @@ static struct clk_branch gcc_gpu_gpll0_cph_clk_src = {
 
 static struct clk_branch gcc_gpu_gpll0_div_cph_clk_src = {
 	.halt_reg = 0x71154,
-	.halt_check = BRANCH_HALT_ENABLE_VOTED,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x71154,
 		.enable_mask = BIT(0),
