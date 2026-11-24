@@ -2163,7 +2163,9 @@ end_coredump:
 
 static int __init init_elf_binfmt(void)
 {
+#ifdef CONFIG_ELF_CORE
 	elf_format.min_coredump = ELF_EXEC_PAGESIZE;
+#endif
 	register_binfmt(&elf_format);
 	return 0;
 }

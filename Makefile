@@ -907,6 +907,21 @@ KBUILD_CFLAGS	+= $(CC_AUTO_VAR_INIT_ZERO_ENABLER)
 endif
 endif
 
+# Keep zero-init for out-of-tree vendor modules even when the core kernel
+# runs with CONFIG_INIT_STACK_NONE=y. QCOM techpacks (display, camera,
+# fastrpc, etc.) are only validated against GKI's INIT_STACK_ALL_ZERO and
+# contain latent uninitialized stack locals; keeping zero-init on KBUILD_EXTMOD
+# avoids silent failures while core hot paths (sched, mm, syscall, binder, fs)
+# run without stack-zeroing overhead.
+ifdef CONFIG_INIT_STACK_NONE
+ifneq ($(KBUILD_EXTMOD),)
+KBUILD_CFLAGS	+= -ftrivial-auto-var-init=zero
+ifdef CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_ENABLER
+KBUILD_CFLAGS	+= -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
+endif
+endif
+endif
+
 # While VLAs have been removed, GCC produces unreachable stack probes
 # for the randomize_kstack_offset feature. Disable it for all compilers.
 KBUILD_CFLAGS	+= $(call cc-option, -fno-stack-clash-protection)
