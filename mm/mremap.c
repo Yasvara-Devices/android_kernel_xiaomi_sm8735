@@ -135,6 +135,28 @@ static pte_t move_soft_dirty_pte(pte_t pte)
 	return pte;
 }
 
+static int mremap_folio_pte_batch(struct vm_area_struct *vma, unsigned long addr,
+		pte_t *ptep, pte_t pte, int max_nr)
+{
+	const fpb_t flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY |
+			    FPB_RESPECT_WRITE;
+	struct folio *folio;
+
+	if (max_nr == 1)
+		return 1;
+
+	/* Avoid expensive folio lookup if we stand no chance of benefit. */
+	if (pte_batch_hint(ptep, pte) == 1)
+		return 1;
+
+	folio = vm_normal_folio(vma, addr, pte);
+	if (!folio || !folio_test_large(folio))
+		return 1;
+
+	return folio_pte_batch(folio, addr, ptep, pte, max_nr, flags, NULL,
+			       NULL, NULL);
+}
+
 static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 		unsigned long old_addr, unsigned long old_end,
 		struct vm_area_struct *new_vma, pmd_t *new_pmd,
@@ -142,11 +164,14 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 {
 	bool need_clear_uffd_wp = vma_has_uffd_without_event_remap(vma);
 	struct mm_struct *mm = vma->vm_mm;
-	pte_t *old_pte, *new_pte, pte;
+	pte_t *old_pte, *new_pte;
+	pte_t old_pteval, pte;
 	pmd_t dummy_pmdval;
 	spinlock_t *old_ptl, *new_ptl;
 	bool force_flush = false;
 	unsigned long len = old_end - old_addr;
+	int max_nr_ptes;
+	int nr_ptes;
 	int err = 0;
 
 	/*
@@ -198,12 +223,14 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 	flush_tlb_batched_pending(vma->vm_mm);
 	arch_enter_lazy_mmu_mode();
 
-	for (; old_addr < old_end; old_pte++, old_addr += PAGE_SIZE,
-				   new_pte++, new_addr += PAGE_SIZE) {
-		if (pte_none(ptep_get(old_pte)))
+	for (; old_addr < old_end; old_pte += nr_ptes, old_addr += nr_ptes * PAGE_SIZE,
+				   new_pte += nr_ptes, new_addr += nr_ptes * PAGE_SIZE) {
+		nr_ptes = 1;
+		max_nr_ptes = (old_end - old_addr) >> PAGE_SHIFT;
+		old_pteval = ptep_get(old_pte);
+		if (pte_none(old_pteval))
 			continue;
 
-		pte = ptep_get_and_clear(mm, old_addr, old_pte);
 		/*
 		 * If we are remapping a valid PTE, make sure
 		 * to flush TLB before we drop the PTL for the
@@ -215,8 +242,12 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 		 * the TLB entry for the old mapping has been
 		 * flushed.
 		 */
-		if (pte_present(pte))
+		if (pte_present(old_pteval)) {
+			nr_ptes = mremap_folio_pte_batch(vma, old_addr, old_pte,
+							 old_pteval, max_nr_ptes);
 			force_flush = true;
+		}
+		pte = get_and_clear_full_ptes(mm, old_addr, old_pte, nr_ptes, 0);
 		pte = move_pte(pte, old_addr, new_addr);
 		pte = move_soft_dirty_pte(pte);
 
@@ -229,7 +260,7 @@ static int move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 				else if (is_swap_pte(pte))
 					pte = pte_swp_clear_uffd_wp(pte);
 			}
-			set_pte_at(mm, new_addr, new_pte, pte);
+			set_ptes(mm, new_addr, new_pte, pte, nr_ptes);
 		}
 	}
 
