@@ -808,11 +808,9 @@ static int cache_allocation_probe(struct platform_device *pdev)
 
 	if (link->status == DL_STATE_DORMANT) {
 		pr_warn("kgsl not probed yet\n");
-		device_link_del(link);
 		return -EPROBE_DEFER;
 	}
 
-	device_link_del(link);
 	pd->df = devfreq_get_devfreq_by_node(pd->gpu_np);
 	if (IS_ERR(pd->df)) {
 		of_node_put(pd->gpu_np);

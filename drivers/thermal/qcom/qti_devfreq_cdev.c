@@ -123,11 +123,8 @@ static int devfreq_cdev_probe(struct platform_device *pdev)
 	}
 	if (link->status == DL_STATE_DORMANT) {
 		dev_dbg(devfreq_cdev->dev, "kgsl not probed yet:%d\n", ret);
-		device_link_del(link);
 		return -EPROBE_DEFER;
 	}
-
-	device_link_del(link);
 
 	devfreq_cdev->gpu_dev = &gpu_pdev->dev;
 	freq_ct = dev_pm_opp_get_opp_count(devfreq_cdev->gpu_dev);
