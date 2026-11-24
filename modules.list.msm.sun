@@ -85,6 +85,7 @@ gh_arm_drv.ko
 gh_dbl.ko
 gh_msgq.ko
 gunyah_hypercall.ko
+timer.ko
 gunyah_platform_hooks.ko
 gunyah.ko
 gunyah_rsc_mgr.ko

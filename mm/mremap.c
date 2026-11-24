@@ -48,7 +48,8 @@ static pud_t *get_old_pud(struct mm_struct *mm, unsigned long addr)
 		return NULL;
 
 	pud = pud_offset(p4d, addr);
-	if (pud_none_or_clear_bad(pud))
+	if (!pud_trans_huge(*pud) && !pud_devmap(*pud) &&
+	    pud_none_or_clear_bad(pud))
 		return NULL;
 
 	return pud;
@@ -355,14 +356,18 @@ static bool move_normal_pud(struct vm_area_struct *vma, unsigned long old_addr,
 	if (new_ptl != old_ptl)
 		spin_lock_nested(new_ptl, SINGLE_DEPTH_NESTING);
 
-	/* Clear the pud */
 	pud = *old_pud;
+	if (unlikely(pud_none(pud)))
+		goto out_unlock;
+
+	/* Clear the pud */
 	pud_clear(old_pud);
 
 	VM_BUG_ON(!pud_none(*new_pud));
 
 	pud_populate(mm, new_pud, pud_pgtable(pud));
 	flush_tlb_range(vma, old_addr, old_addr + PUD_SIZE);
+out_unlock:
 	if (new_ptl != old_ptl)
 		spin_unlock(new_ptl);
 	spin_unlock(old_ptl);
@@ -397,14 +402,15 @@ static bool move_huge_pud(struct vm_area_struct *vma, unsigned long old_addr,
 	 * We don't have to worry about the ordering of src and dst
 	 * ptlocks because exclusive mmap_lock prevents deadlock.
 	 */
-	old_ptl = pud_lock(vma->vm_mm, old_pud);
+	old_ptl = __pud_trans_huge_lock(old_pud, vma);
+	if (unlikely(!old_ptl))
+		return false;
 	new_ptl = pud_lockptr(mm, new_pud);
 	if (new_ptl != old_ptl)
 		spin_lock_nested(new_ptl, SINGLE_DEPTH_NESTING);
 
 	/* Clear the pud */
-	pud = *old_pud;
-	pud_clear(old_pud);
+	pud = pudp_huge_get_and_clear(mm, old_addr, old_pud);
 
 	VM_BUG_ON(!pud_none(*new_pud));
 
@@ -634,12 +640,11 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 		if (!new_pud)
 			break;
 		if (pud_trans_huge(*old_pud) || pud_devmap(*old_pud)) {
-			if (extent == HPAGE_PUD_SIZE) {
-				move_pgt_entry(HPAGE_PUD, vma, old_addr, new_addr,
-					       old_pud, new_pud, need_rmap_locks);
-				/* We ignore and continue on error? */
+			if (extent == HPAGE_PUD_SIZE &&
+			    move_pgt_entry(HPAGE_PUD, vma, old_addr, new_addr,
+					   old_pud, new_pud, need_rmap_locks))
 				continue;
-			}
+			split_huge_pud(vma, old_pud, old_addr);
 		} else if (IS_ENABLED(CONFIG_HAVE_MOVE_PUD) &&
 			   extent == PUD_SIZE && uffd_supports_move) {
 
@@ -792,6 +797,21 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 		 */
 		move_page_tables(new_vma, new_addr, vma, old_addr, moved_len,
 				 true, false);
+
+		/*
+		 * When the error path completes, the new VMA will be
+		 * unmapped rather than the old one.
+		 *
+		 * When an accountable move is being performed, this unmapping
+		 * will not uncharge any expansion, so do that now.
+		 *
+		 * A move is accountable if the VMA is accountable and
+		 * MREMAP_DONTUNMAP is not specified, so only do so if the
+		 * latter is true.
+		 */
+		if (vm_flags & VM_ACCOUNT && !(flags & MREMAP_DONTUNMAP))
+			vm_unacct_memory(to_account >> PAGE_SHIFT);
+
 		vma = new_vma;
 		old_len = new_len;
 		old_addr = new_addr;
@@ -801,7 +821,14 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	}
 
 	if (is_vm_hugetlb_page(vma)) {
+		/*
+		 * Rmap walks might still find this VMA and take the lock
+		 * inside the reservation map for __vma_private_lock(). Don't clear
+		 * the reservation map while that is possible.
+		 */
+		i_mmap_lock_write(vma->vm_file->f_mapping);
 		clear_vma_resv_huge_pages(vma);
+		i_mmap_unlock_write(vma->vm_file->f_mapping);
 	}
 
 	/* Conceal VM_ACCOUNT so old reservation is not undone */

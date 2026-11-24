@@ -1541,7 +1541,7 @@ int snd_seq_client_notify_subscription(int client, int port,
 	event.data.connect.dest = info->dest;
 	event.data.connect.sender = info->sender;
 
-	return snd_seq_system_notify(client, port, &event);  /* non-atomic */
+	return snd_seq_system_notify(client, port, &event, false);  /* non-atomic */
 }
 
 
@@ -2295,6 +2295,16 @@ static int snd_seq_ioctl_client_ump_info(struct snd_seq_client *caller,
  error:
 	mutex_unlock(&cptr->ioctl_mutex);
 	snd_seq_client_unlock(cptr);
+	if (!err && cmd == SNDRV_SEQ_IOCTL_SET_CLIENT_UMP_INFO) {
+		if (type == SNDRV_SEQ_CLIENT_UMP_INFO_ENDPOINT)
+			snd_seq_system_ump_notify(client, 0,
+						  SNDRV_SEQ_EVENT_UMP_EP_CHANGE,
+						  false);
+		else
+			snd_seq_system_ump_notify(client, type - 1,
+						  SNDRV_SEQ_EVENT_UMP_BLOCK_CHANGE,
+						  false);
+	}
 	return err;
 }
 #endif
@@ -2785,16 +2795,15 @@ void snd_seq_info_clients_read(struct snd_info_entry *entry,
  *  REGISTRATION PART
  */
 
-static const struct file_operations snd_seq_f_ops =
-{
-	.owner =	THIS_MODULE,
-	.read =		snd_seq_read,
-	.write =	snd_seq_write,
-	.open =		snd_seq_open,
-	.release =	snd_seq_release,
-	.poll =		snd_seq_poll,
-	.unlocked_ioctl =	snd_seq_ioctl,
-	.compat_ioctl =	snd_seq_ioctl_compat,
+static const struct file_operations snd_seq_f_ops = {
+	.owner		=	THIS_MODULE,
+	.read		=	snd_seq_read,
+	.write		=	snd_seq_write,
+	.open		=	snd_seq_open,
+	.release	=	snd_seq_release,
+	.poll		=	snd_seq_poll,
+	.unlocked_ioctl	=	snd_seq_ioctl,
+	.compat_ioctl	=	snd_seq_ioctl_compat,
 };
 
 static struct device *seq_dev;

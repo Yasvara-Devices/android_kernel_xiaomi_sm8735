@@ -1054,7 +1054,8 @@ static int acct_stack_growth(struct vm_area_struct *vma,
 	 * Overcommit..  This must be the final test, as it will
 	 * update security statistics.
 	 */
-	if (security_vm_enough_memory_mm(mm, grow))
+	if ((vma->vm_flags & VM_ACCOUNT) &&
+	    security_vm_enough_memory_mm(mm, grow))
 		return -ENOMEM;
 
 	return 0;
@@ -1429,14 +1430,17 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 	 * Private writable mapping: check memory availability
 	 */
 	if (accountable_mapping(file, vm_flags)) {
-		charged = pglen;
-		charged -= vms.nr_accounted;
-		if (charged) {
-			error = security_vm_enough_memory_mm(mm, charged);
+		const unsigned long uncharged = pglen - vms.nr_accounted;
+
+		/* Charge only what's not already charged by mappings we replace. */
+		if (uncharged) {
+			error = security_vm_enough_memory_mm(mm, uncharged);
 			if (error)
 				goto abort_munmap;
 		}
 
+		/* Our new mapping owns the entire charge now. */
+		charged = pglen;
 		vms.nr_accounted = 0;
 		vm_flags |= VM_ACCOUNT;
 		vmg.flags = vm_flags;

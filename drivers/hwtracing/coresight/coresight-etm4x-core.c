@@ -1005,6 +1005,9 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
 	coresight_csr_set_etr_atid(csdev, drvdata->trcid, false, NULL);
 
 	spin_unlock(&drvdata->spinlock);
+
+	cscfg_csdev_disable_active_config(csdev);
+
 	cpus_read_unlock();
 
 	/*

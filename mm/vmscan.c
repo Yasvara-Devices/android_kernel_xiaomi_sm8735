@@ -3938,7 +3938,7 @@ restart:
 
 		walk->mm_stats[MM_NONLEAF_FOUND]++;
 
-		if (!walk_pte_range(&val, addr, next, args))
+		if (!walk_pte_range(pmd + i, addr, next, args))
 			continue;
 
 		walk->mm_stats[MM_NONLEAF_ADDED]++;
@@ -3974,7 +3974,7 @@ restart:
 		if (!pud_present(val) || WARN_ON_ONCE(pud_leaf(val)))
 			continue;
 
-		walk_pmd_range(&val, addr, next, args);
+		walk_pmd_range(pud + i, addr, next, args);
 
 		if (need_resched() || walk->batched >= MAX_LRU_BATCH) {
 			end = (addr | ~PUD_MASK) + 1;
@@ -5092,13 +5092,8 @@ static bool should_abort_scan(struct lruvec *lruvec, struct scan_control *sc)
 	trace_android_vh_mglru_should_abort_scan_ex(&sc->android_vendor_data1,
 						    &bypass);
 #endif
-	/* don't abort memcg reclaim to ensure fairness */
-	if (!root_reclaim(sc) && !bypass)
-		return false;
-
 	if (unlikely(sc->proactive && signal_pending(current)))
 		return true;
-
 	if (sc->nr_reclaimed >= max(sc->nr_to_reclaim, compact_gap(sc->order)))
 		return true;
 

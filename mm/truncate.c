@@ -603,8 +603,11 @@ static int folio_launder(struct address_space *mapping, struct folio *folio)
 int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 			   gfp_t gfp)
 {
-	void (*free_folio)(struct folio *);
+	void (*free_folio)(struct folio *folio);
 	int ret;
+
+	if (folio->mapping != mapping)
+		return 0;
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 
