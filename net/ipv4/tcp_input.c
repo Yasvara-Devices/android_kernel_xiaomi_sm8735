@@ -744,18 +744,29 @@ static inline void tcp_rcv_rtt_measure_ts(struct sock *sk,
 	}
 }
 
-static void tcp_rcvbuf_grow(struct sock *sk)
+static void tcp_rcvbuf_grow(struct sock *sk, u32 newval)
 {
 	const struct net *net = sock_net(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	int rcvwin, rcvbuf, cap;
+	u32 rcvwin, rcvbuf, cap, oldval;
+	u64 grow;
+
+	oldval = tp->rcvq_space.space;
+	tp->rcvq_space.space = newval;
 
 	if (!READ_ONCE(net->ipv4.sysctl_tcp_moderate_rcvbuf) ||
 	    (sk->sk_userlocks & SOCK_RCVBUF_LOCK))
 		return;
 
+	/* DRS is always one RTT late. */
+	rcvwin = newval << 1;
+
 	/* slow start: allow the sender to double its rate. */
-	rcvwin = tp->rcvq_space.space << 1;
+	if (likely(oldval)) {
+		grow = (u64)rcvwin * (newval - oldval);
+		do_div(grow, oldval);
+		rcvwin += grow << 1;
+	}
 
 	cap = READ_ONCE(net->ipv4.sysctl_tcp_rmem[2]);
 
@@ -791,9 +802,7 @@ void tcp_rcv_space_adjust(struct sock *sk)
 	if (copied <= tp->rcvq_space.space)
 		goto new_measure;
 
-	tp->rcvq_space.space = copied;
-
-	tcp_rcvbuf_grow(sk);
+	tcp_rcvbuf_grow(sk, copied);
 
 new_measure:
 	tp->rcvq_space.seq = tp->copied_seq;
