@@ -364,7 +364,25 @@ static ssize_t thermal_screen_state_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", screen_state);
 }
 
-static DEVICE_ATTR(screen_state, 0664, thermal_screen_state_show, NULL);
+static ssize_t thermal_screen_state_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t len)
+{
+	int val = 0;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	val = val ? 1 : 0;
+	if (screen_state != val) {
+		screen_state = val;
+		sysfs_notify(&mi_thermal_dev.dev->kobj, NULL, "screen_state");
+	}
+	return len;
+}
+
+static DEVICE_ATTR(screen_state, 0664, thermal_screen_state_show,
+		   thermal_screen_state_store);
 
 static ssize_t thermal_sconfig_show(struct device *dev,
 				    struct device_attribute *attr, char *buf)
