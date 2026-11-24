@@ -678,8 +678,8 @@
   jiffies_to_msecs
   kasan_flag_enabled
   kasprintf
-  kernel_neon_begin
-  kernel_neon_end
+  __kernel_neon_begin
+  __kernel_neon_end
   __kfifo_alloc
   __kfifo_free
   __kfifo_in
@@ -778,6 +778,7 @@
   __mmap_lock_do_trace_released
   __mmap_lock_do_trace_start_locking
   mmc_of_parse
+  mmc_of_parse_clk_phase
   mmc_send_tuning
   __mmdrop
   mod_delayed_work_on

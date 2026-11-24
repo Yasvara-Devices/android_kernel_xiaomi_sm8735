@@ -941,6 +941,7 @@
   __wake_up
   __warn_printk
   watchdog_init_timeout
+  watchdog_notify_pretimeout
   ww_mutex_lock
   ww_mutex_lock_interruptible
   ww_mutex_unlock
@@ -1017,6 +1018,7 @@
   panic_notifier_list
   pskb_put
   skb_cow_data
+  skb_pull_data
 
 # required by bam_dma.ko
   dma_async_device_unregister
@@ -1186,6 +1188,7 @@
   __mmap_lock_do_trace_acquire_returned
   __mmap_lock_do_trace_released
   __mmap_lock_do_trace_start_locking
+  mtree_load
   __traceiter_mmap_lock_acquire_returned
   __traceiter_mmap_lock_released
   __traceiter_mmap_lock_start_locking
@@ -1358,6 +1361,7 @@
   __skb_gso_segment
   strncpy
   tasklet_unlock_wait
+  timer_shutdown_sync
   unregister_inet6addr_notifier
   unregister_inetaddr_notifier
 
@@ -1887,6 +1891,7 @@
 # required by qcom-scm.ko
   __arm_smccc_smc
   __cpu_present_mask
+  irq_create_fwspec_mapping
   kimage_voffset
   kstrtobool
   __sysfs_match_string
@@ -1945,6 +1950,7 @@
   of_find_compatible_node
 
 # required by qcom_pmic_tcpm.ko
+  disable_delayed_work_sync
   tcpm_cc_change
   tcpm_pd_hard_reset
   tcpm_pd_receive
@@ -1972,6 +1978,7 @@
 # required by qcom_rpmh.ko
   arch_timer_read_counter
   cpu_pm_register_notifier
+  cpu_pm_unregister_notifier
   dev_pm_genpd_get_next_hrtimer
   __num_online_cpus
   _raw_spin_trylock
@@ -1985,6 +1992,8 @@
   pm_suspend_target_state
 
 # required by qcom_tzmem.ko
+  __do_once_done
+  __do_once_start
   gen_pool_add_owner
   gen_pool_alloc_algo_owner
   gen_pool_best_fit
@@ -2084,6 +2093,7 @@
   driver_set_override
   platform_device_add
   platform_device_alloc
+  platform_device_del
   wait_for_completion_interruptible_timeout
 
 # required by slimbus.ko
@@ -2225,6 +2235,7 @@
 
 # required by ucsi_glink.ko
   devm_gpiod_get_index_optional
+  disable_work_sync
   typec_set_orientation
   ucsi_create
   ucsi_destroy

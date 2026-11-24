@@ -123,7 +123,7 @@ static void __hyp_clock_work(struct work_struct *work)
 					    err / NSEC_PER_USEC);
 	}
 
-	rate = div64_u64(delta_cycles * NSEC_PER_SEC, delta_boot);
+	rate = mul_u64_u64_div_u64(delta_cycles, NSEC_PER_SEC, delta_boot);
 	clocks_calc_mult_shift(&hyp_clock->mult, &hyp_clock->shift,
 			       rate, NSEC_PER_SEC, CLOCK_MAX_CONVERSION_S);
 
@@ -803,19 +803,19 @@ read:
 static int hyp_trace_raw_open(struct inode *inode, struct file *file)
 {
 	int ret = hyp_trace_pipe_open(inode, file);
+	struct buffer_data_read_page *spare = NULL;
 	struct ht_iterator *iter;
 
 	if (ret)
 		return ret;
 
 	iter = file->private_data;
-	iter->spare = ring_buffer_alloc_read_page(iter->hyp_buffer->trace_buffer,
-						  iter->cpu);
-	if (IS_ERR(iter->spare)) {
-		ret = PTR_ERR(iter->spare);
-		iter->spare = NULL;
+	ret = ring_buffer_alloc_read_page(iter->hyp_buffer->trace_buffer,
+					  iter->cpu, &spare);
+	if (ret)
 		return ret;
-	}
+
+	iter->spare = spare;
 
 	return 0;
 }

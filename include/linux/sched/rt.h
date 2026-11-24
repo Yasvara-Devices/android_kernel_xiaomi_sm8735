@@ -52,8 +52,10 @@ static inline bool rt_or_dl_task_policy(struct task_struct *tsk)
 
 #ifdef CONFIG_RT_MUTEXES
 extern void rt_mutex_pre_schedule(void);
+extern void rt_mutex_futex_pre_schedule(void);
 extern void rt_mutex_schedule(void);
 extern void rt_mutex_post_schedule(void);
+extern void rt_mutex_futex_post_schedule(void);
 
 /*
  * Must hold either p->pi_lock or task_rq(p)->lock.
@@ -74,6 +76,10 @@ static inline struct task_struct *rt_mutex_get_top_task(struct task_struct *task
 
 extern void normalize_rt_tasks(void);
 
+
+#ifdef CONFIG_RT_SOFTIRQ_AWARE_SCHED
+extern bool local_rt_runnable(void);
+#endif
 
 /*
  * default timeslice is 100 msecs (used only for SCHED_RR tasks).

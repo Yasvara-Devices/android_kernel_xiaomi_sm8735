@@ -159,6 +159,7 @@ int symbol_read_exports(FILE *file)
 
 	free(line);
 	debug("%d exported symbols", nsym);
+
 	return nsym;
 }
 

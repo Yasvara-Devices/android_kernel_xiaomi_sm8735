@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 		error("no input files?");
 	}
 
-	if (symbol_read_exports(stdin) == 0)
+	if (!symbol_read_exports(stdin))
 		return 0;
 
 	if (symtypes_file) {

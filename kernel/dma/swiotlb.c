@@ -100,16 +100,6 @@ static struct io_tlb_mem io_tlb_default_mem;
 
 #endif	/* CONFIG_SWIOTLB_DYNAMIC */
 
-#ifdef CONFIG_SWIOTLB_NONLINEAR
-phys_addr_t io_tlb_start, io_tlb_end;
-static unsigned long io_tlb_nslabs;
-static char *io_tlb_vstart;
-
-static inline unsigned char *swiotlb_phys_to_virt(phys_addr_t tlb_addr);
-#else
-#define swiotlb_phys_to_virt phys_to_virt
-#endif
-
 static unsigned long default_nslabs = IO_TLB_DEFAULT_SIZE >> IO_TLB_SHIFT;
 static unsigned long default_nareas;
 
@@ -278,9 +268,9 @@ void __init swiotlb_update_mem_attributes(void)
 }
 
 static void swiotlb_init_io_tlb_pool(struct io_tlb_pool *mem, phys_addr_t start,
-		unsigned long nslabs, bool late_alloc, unsigned int nareas)
+		void *vaddr, unsigned long nslabs, bool late_alloc,
+		unsigned int nareas)
 {
-	void *vaddr = swiotlb_phys_to_virt(start);
 	unsigned long bytes = nslabs << IO_TLB_SHIFT, i;
 
 	mem->nslabs = nslabs;
@@ -421,7 +411,7 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 		return;
 	}
 
-	swiotlb_init_io_tlb_pool(mem, __pa(tlb), nslabs, false, nareas);
+	swiotlb_init_io_tlb_pool(mem, __pa(tlb), tlb, nslabs, false, nareas);
 	add_mem_pool(&io_tlb_default_mem, mem);
 
 	if (flags & SWIOTLB_VERBOSE)
@@ -519,7 +509,7 @@ retry:
 
 	set_memory_decrypted((unsigned long)vstart,
 			     (nslabs << IO_TLB_SHIFT) >> PAGE_SHIFT);
-	swiotlb_init_io_tlb_pool(mem, virt_to_phys(vstart), nslabs, true,
+	swiotlb_init_io_tlb_pool(mem, virt_to_phys(vstart), vstart, nslabs, true,
 				 nareas);
 	add_mem_pool(&io_tlb_default_mem, mem);
 
@@ -532,63 +522,6 @@ error_area:
 	free_pages((unsigned long)vstart, order);
 	return -ENOMEM;
 }
-
-#ifdef CONFIG_SWIOTLB_NONLINEAR
-static int swiotlb_late_init_with_tbl(char *tlb, unsigned long nslabs)
-{
-	struct io_tlb_pool *mem = &io_tlb_default_mem.defpool;
-	unsigned long bytes = nslabs << IO_TLB_SHIFT;
-	unsigned int area_order;
-
-	/* protect against double initialization */
-	if (WARN_ON_ONCE(mem->nslabs))
-		return -ENOMEM;
-
-	if (!default_nareas)
-		swiotlb_adjust_nareas(num_possible_cpus());
-
-	area_order = get_order(array_size(sizeof(*mem->areas),
-		default_nareas));
-	mem->areas = (struct io_tlb_area *)
-		__get_free_pages(GFP_KERNEL | __GFP_ZERO, area_order);
-	if (!mem->areas)
-		return -ENOMEM;
-
-	mem->slots = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-		get_order(array_size(sizeof(*mem->slots), nslabs)));
-	if (!mem->slots)
-		goto error_slots;
-
-	set_memory_decrypted((unsigned long)tlb, bytes >> PAGE_SHIFT);
-	swiotlb_init_io_tlb_pool(mem, io_tlb_start, nslabs, true, default_nareas);
-	add_mem_pool(&io_tlb_default_mem, mem);
-
-	swiotlb_print_info();
-	return 0;
-
-error_slots:
-	free_pages((unsigned long)mem->areas, area_order);
-	return -ENOMEM;
-}
-
-int swiotlb_late_init_with_tblpaddr(char *tlb,
-			phys_addr_t tlb_paddr, unsigned long nslabs)
-{
-	unsigned long bytes;
-
-	if (io_tlb_start)
-		return -EBUSY;
-
-	bytes = nslabs << IO_TLB_SHIFT;
-	io_tlb_nslabs = nslabs;
-	io_tlb_start = tlb_paddr;
-	io_tlb_vstart = tlb;
-	io_tlb_end = io_tlb_start + bytes;
-
-	return swiotlb_late_init_with_tbl(tlb, nslabs);
-}
-EXPORT_SYMBOL_GPL(swiotlb_late_init_with_tblpaddr);
-#endif	/* CONFIG_SWIOTLB_NONLINEAR */
 
 void __init swiotlb_exit(void)
 {
@@ -674,25 +607,26 @@ error:
  * @bytes:	Size of the buffer.
  * @phys_limit:	Maximum allowed physical address of the buffer.
  * @gfp:	GFP flags for the allocation.
+ * @vaddr:	Receives the virtual address for the allocated buffer.
  *
  * Return: Allocated pages, or %NULL on allocation failure.
  */
 static struct page *swiotlb_alloc_tlb(struct device *dev, size_t bytes,
-		u64 phys_limit, gfp_t gfp)
+		u64 phys_limit, gfp_t gfp, void **vaddr)
 {
 	struct page *page;
+
+	*vaddr = NULL;
 
 	/*
 	 * Allocate from the atomic pools if memory is encrypted and
 	 * the allocation is atomic, because decrypting may block.
 	 */
 	if (!gfpflags_allow_blocking(gfp) && dev && force_dma_unencrypted(dev)) {
-		void *vaddr;
-
 		if (!IS_ENABLED(CONFIG_DMA_COHERENT_POOL))
 			return NULL;
 
-		return dma_alloc_from_pool(dev, bytes, &vaddr, gfp,
+		return dma_alloc_from_pool(dev, bytes, vaddr, gfp,
 					   dma_coherent_ok);
 	}
 
@@ -714,6 +648,8 @@ static struct page *swiotlb_alloc_tlb(struct device *dev, size_t bytes,
 			return NULL;
 	}
 
+	if (page)
+		*vaddr = phys_to_virt(page_to_phys(page));
 	return page;
 }
 
@@ -754,6 +690,7 @@ static struct io_tlb_pool *swiotlb_alloc_pool(struct device *dev,
 {
 	struct io_tlb_pool *pool;
 	unsigned int slot_order;
+	void *tlb_vaddr;
 	struct page *tlb;
 	size_t pool_size;
 	size_t tlb_size;
@@ -770,7 +707,8 @@ static struct io_tlb_pool *swiotlb_alloc_pool(struct device *dev,
 	pool->areas = (void *)pool + sizeof(*pool);
 
 	tlb_size = nslabs << IO_TLB_SHIFT;
-	while (!(tlb = swiotlb_alloc_tlb(dev, tlb_size, phys_limit, gfp))) {
+	while (!(tlb = swiotlb_alloc_tlb(dev, tlb_size, phys_limit, gfp,
+					 &tlb_vaddr))) {
 		if (nslabs <= minslabs)
 			goto error_tlb;
 		nslabs = ALIGN(nslabs >> 1, IO_TLB_SEGSIZE);
@@ -784,11 +722,12 @@ static struct io_tlb_pool *swiotlb_alloc_pool(struct device *dev,
 	if (!pool->slots)
 		goto error_slots;
 
-	swiotlb_init_io_tlb_pool(pool, page_to_phys(tlb), nslabs, true, nareas);
+	swiotlb_init_io_tlb_pool(pool, page_to_phys(tlb), tlb_vaddr, nslabs,
+				 true, nareas);
 	return pool;
 
 error_slots:
-	swiotlb_free_tlb(page_address(tlb), tlb_size);
+	swiotlb_free_tlb(tlb_vaddr, tlb_size);
 error_tlb:
 	kfree(pool);
 error:
@@ -922,13 +861,6 @@ static unsigned int swiotlb_align_offset(struct device *dev,
 		(align_mask | (IO_TLB_SIZE - 1));
 }
 
-#ifdef CONFIG_SWIOTLB_NONLINEAR
-static inline unsigned char *swiotlb_phys_to_virt(phys_addr_t tlb_addr)
-{
-	return (unsigned char *)(io_tlb_vstart + (tlb_addr - io_tlb_start));
-}
-#endif
-
 /*
  * Bounce: copy the swiotlb buffer from or back to the original dma location
  */
@@ -938,7 +870,6 @@ static void swiotlb_bounce(struct device *dev, phys_addr_t tlb_addr, size_t size
 	int index = (tlb_addr - mem->start) >> IO_TLB_SHIFT;
 	phys_addr_t orig_addr = mem->slots[index].orig_addr;
 	size_t alloc_size = mem->slots[index].alloc_size;
-	unsigned long pfn = PFN_DOWN(orig_addr);
 	unsigned char *vaddr = mem->vaddr + tlb_addr - mem->start;
 	int tlb_offset;
 
@@ -971,7 +902,8 @@ static void swiotlb_bounce(struct device *dev, phys_addr_t tlb_addr, size_t size
 		size = alloc_size;
 	}
 
-	if (PageHighMem(pfn_to_page(pfn))) {
+	if (PageHighMem(pfn_to_page(PFN_DOWN(orig_addr)))) {
+		unsigned long pfn = PFN_DOWN(orig_addr);
 		unsigned int offset = orig_addr & ~PAGE_MASK;
 		struct page *page;
 		unsigned int sz = 0;
@@ -1644,10 +1576,6 @@ void __swiotlb_tbl_unmap_single(struct device *dev, phys_addr_t tlb_addr,
 	swiotlb_release_slots(dev, tlb_addr, pool);
 }
 
-#ifdef CONFIG_SWIOTLB_NONLINEAR
-EXPORT_SYMBOL_GPL(__swiotlb_tbl_unmap_single);
-#endif
-
 void __swiotlb_sync_single_for_device(struct device *dev, phys_addr_t tlb_addr,
 		size_t size, enum dma_data_direction dir,
 		struct io_tlb_pool *pool)
@@ -1702,15 +1630,7 @@ dma_addr_t swiotlb_map(struct device *dev, phys_addr_t paddr, size_t size,
 	}
 	return dma_addr;
 }
-#ifdef CONFIG_SWIOTLB_NONLINEAR
-EXPORT_SYMBOL_GPL(swiotlb_map);
 
-size_t swiotlb_max_mapping_size(struct device *dev)
-{
-	return 4096;
-}
-
-#else
 size_t swiotlb_max_mapping_size(struct device *dev)
 {
 	int min_align_mask = dma_get_min_align_mask(dev);
@@ -1726,7 +1646,6 @@ size_t swiotlb_max_mapping_size(struct device *dev)
 
 	return ((size_t)IO_TLB_SIZE) * IO_TLB_SEGSIZE - min_align;
 }
-#endif
 
 /**
  * is_swiotlb_allocated() - check if the default software IO TLB is initialized
@@ -1764,10 +1683,10 @@ phys_addr_t default_swiotlb_base(void)
 phys_addr_t default_swiotlb_limit(void)
 {
 #ifdef CONFIG_SWIOTLB_DYNAMIC
-	return io_tlb_default_mem.phys_limit;
-#else
-	return io_tlb_default_mem.defpool.end - 1;
+	if (io_tlb_default_mem.can_grow)
+		return io_tlb_default_mem.phys_limit;
 #endif
+	return io_tlb_default_mem.defpool.end - 1;
 }
 
 #ifdef CONFIG_DEBUG_FS
@@ -1942,7 +1861,8 @@ static int rmem_swiotlb_device_init(struct reserved_mem *rmem,
 
 		set_memory_decrypted((unsigned long)phys_to_virt(rmem->base),
 				     rmem->size >> PAGE_SHIFT);
-		swiotlb_init_io_tlb_pool(pool, rmem->base, nslabs,
+		swiotlb_init_io_tlb_pool(pool, rmem->base, phys_to_virt(rmem->base),
+					 nslabs,
 					 false, nareas);
 		mem->force_bounce = true;
 		mem->for_alloc = true;

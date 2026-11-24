@@ -52,6 +52,7 @@ _COMMON_GKI_MODULES_LIST = [
     "drivers/virtio/virtio_pci.ko",
     "drivers/virtio/virtio_pci_legacy_dev.ko",
     "drivers/virtio/virtio_pci_modern_dev.ko",
+    "drivers/watchdog/pretimeout_dump.ko",
     "fs/netfs/netfs.ko",
     "kernel/kheaders.ko",
     "lib/crypto/libarc4.ko",
@@ -182,6 +183,14 @@ _KUNIT_COMMON_MODULES_LIST = [
     "sound/soc/soc-utils-test.ko",
 ]
 
+# KUnit modules only built for x86_64. The wrapfd KUnit test is not built
+# for arm64 yet, as it would need the wrapfd symbols in the arm64 KMI
+# symbol list.
+_KUNIT_X86_64_MODULES_LIST = [
+    # keep sorted
+    "drivers/android/tests/wrapfd_kunit.ko",
+]
+
 # Modules defined by tools/testing/kunit/configs/android/kunit_clk_defconfig
 _KUNIT_CLK_MODULES_LIST = [
     "drivers/clk/clk-gate_test.ko",
@@ -207,7 +216,7 @@ def get_kunit_modules_list(arch = None):
     elif arch == "i386":
         kunit_modules_list += []
     elif arch == "x86_64":
-        kunit_modules_list += []
+        kunit_modules_list += _KUNIT_X86_64_MODULES_LIST
     else:
         fail("{}: arch {} not supported. Use one of [arm, arm64, i386, x86_64]".format(
             str(native.package_relative_label(":x")).removesuffix(":x"),
