@@ -33,6 +33,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/nospec.h>
+#include <linux/yasvara_hide.h>
 
 #include "pnode.h"
 #include "internal.h"
@@ -5220,10 +5221,55 @@ static int grab_requested_root(struct mnt_namespace *ns, struct path *root)
 	return 0;
 }
 
+static noinline bool yasvara_eval_ns_mount(struct mount *r,
+					   const struct path *root,
+					   bool *force_ro)
+{
+	struct vfsmount *mnt = &r->mnt;
+	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
+	struct super_block *sb = mnt->mnt_sb;
+	const char *fstype = (sb && sb->s_type) ? sb->s_type->name : NULL;
+	const char *devname = r->mnt_devname;
+	char buf[512];
+	char *res;
+	bool is_sys = false;
+
+	if (force_ro)
+		*force_ro = false;
+	if (!yasvara_is_app_uid())
+		return false;
+
+	if (yasvara_should_hide_mount_parts(fstype, NULL, NULL, devname) ||
+	    yasvara_is_forbidden_mount_str_n(mnt->mnt_root->d_name.name, NAME_MAX + 1) ||
+	    (r->mnt_mountpoint &&
+	     yasvara_is_forbidden_mount_str_n(r->mnt_mountpoint->d_name.name,
+					      NAME_MAX + 1)))
+		return true;
+
+	res = __d_path(&mnt_path, root, buf, sizeof(buf));
+	if (!res)
+		return false;
+	if (!IS_ERR(res)) {
+		if (yasvara_should_hide_mount_parts(fstype, NULL, res, NULL))
+			return true;
+		is_sys = yasvara_is_system_mount_path(res);
+	}
+
+	res = dentry_path_raw(mnt->mnt_root, buf, sizeof(buf));
+	if (!IS_ERR(res) &&
+	    yasvara_should_hide_mount_parts(NULL, res, NULL, NULL))
+		return true;
+
+	if (force_ro)
+		*force_ro = is_sys;
+	return false;
+}
+
 static int do_statmount(struct kstatmount *s, u64 mnt_id, u64 mnt_ns_id,
 			struct mnt_namespace *ns)
 {
 	struct mount *m;
+	bool force_ro = false;
 	int err;
 
 	/* Has the namespace already been emptied? */
@@ -5247,14 +5293,23 @@ static int do_statmount(struct kstatmount *s, u64 mnt_id, u64 mnt_ns_id,
 	    !ns_capable_noaudit(ns->user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
 
+	if (yasvara_eval_ns_mount(m, &s->root, &force_ro))
+		return -ENOENT;
+
 	err = security_sb_statfs(s->mnt->mnt_root);
 	if (err)
 		return err;
-	if (s->mask & STATMOUNT_SB_BASIC)
+	if (s->mask & STATMOUNT_SB_BASIC) {
 		statmount_sb_basic(s);
+		if (force_ro)
+			s->sm.sb_flags |= SB_RDONLY;
+	}
 
-	if (s->mask & STATMOUNT_MNT_BASIC)
+	if (s->mask & STATMOUNT_MNT_BASIC) {
 		statmount_mnt_basic(s);
+		if (force_ro)
+			s->sm.mnt_attr |= MOUNT_ATTR_RDONLY;
+	}
 
 	if (s->mask & STATMOUNT_PROPAGATE_FROM)
 		statmount_propagate_from(s);
@@ -5494,6 +5549,8 @@ static ssize_t do_listmount(struct klistmount *kls, bool reverse)
 		if (r->mnt_id_unique == mnt_parent_id)
 			continue;
 		if (!is_path_reachable(r, r->mnt.mnt_root, &orig))
+			continue;
+		if (yasvara_eval_ns_mount(r, &kls->root, NULL))
 			continue;
 		*mnt_ids = r->mnt_id_unique;
 		mnt_ids++;
