@@ -765,9 +765,18 @@ static int strategy_buckchg_get_ucsi_curr_ma(void)
 	if (!psy)
 		return 0;
 
+	/*
+	 * UCSI CURRENT_MAX iterates con->src_pdos[], which can be 0 when ADSP
+	 * omits Source_Capabilities on PC/laptop or 3rd-party USB-C ports, while
+	 * CURRENT_NOW holds the live negotiated RDO operating current (e.g. 3000 mA).
+	 */
 	if (!power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_MAX,
 				       &val) &&
 	    val.intval > 0)
+		ma = val.intval / 1000;
+	else if (!power_supply_get_property(psy, POWER_SUPPLY_PROP_CURRENT_NOW,
+					    &val) &&
+		 val.intval > 0)
 		ma = val.intval / 1000;
 	power_supply_put(psy);
 	return ma;
@@ -1022,8 +1031,6 @@ static void
 strategy_buckchg_process_type_change(int value,
 				     struct strategy_buckchg_dev *info)
 {
-	struct timespec64 ts;
-
 	if (value == info->proc_data.real_type) {
 		if (value == XM_CHARGER_TYPE_UNKNOW)
 			strategy_buckchg_check_charger_change(info);
@@ -1055,19 +1062,12 @@ strategy_buckchg_process_type_change(int value,
 	strategy_buck_update_req_volt(info);
 	mod_delayed_work(system_wq, &info->monitor_work, 0);
 
-	ktime_get_boottime_ts64(&ts);
-	mca_log_info("verify_process_end: %d\n", info->verify_process_end);
-	if (info->proc_data.real_type == XM_CHARGER_TYPE_PD) {
-		if (!info->verify_process_end && (u64)ts.tv_sec > 60) {
-			mca_vote(info->input_limit_voter, "icl_limit", true,
-				 STATEGY_INPUT_DEFAULT_VALUE);
-			schedule_delayed_work(&info->check_pd_secret_work,
-					      msecs_to_jiffies(10000));
-		}
-	} else {
-		mca_vote(info->input_limit_voter, "icl_limit", false,
-			 STATEGY_INPUT_DEFAULT_VALUE);
-	}
+	/*
+	 * Do not choke PD input current to 100 mA for 10s waiting on
+	 * proprietary batterysecret UVDM verification (universal PD/cable bypass).
+	 */
+	mca_vote(info->input_limit_voter, "icl_limit", false,
+		 STATEGY_INPUT_DEFAULT_VALUE);
 }
 
 static void
@@ -1894,7 +1894,9 @@ strategy_buckchg_select_charg_para(struct strategy_buckchg_dev *info)
 
 			if (info->base_flip_same &&
 			    strategy_class_fg_get_fastcharge() &&
-			    info->proc_data.real_type == XM_CHARGER_TYPE_PPS) {
+			    (info->proc_data.real_type == XM_CHARGER_TYPE_PPS ||
+			     info->proc_data.real_type ==
+				     XM_CHARGER_TYPE_PD_VERIFY)) {
 				int batt_temp = 0, temp_offset_flag = 0;
 
 				(void)strategy_class_fg_ops_get_temperature(
@@ -1933,8 +1935,10 @@ strategy_buckchg_select_charg_para(struct strategy_buckchg_dev *info)
 			if (!info->pwr_cap.nums) {
 				protocol_class_get_adapter_power_cap(
 					ADAPTER_PROTOCOL_PD, &info->pwr_cap);
-				if (info->pwr_cap.nums)
+				if (info->pwr_cap.nums) {
 					stategy_buckchg_is_pdo_9v(info);
+					strategy_buck_update_req_volt(info);
+				}
 			}
 
 			pdo_curr = info->pwr_cap
@@ -1942,17 +1946,31 @@ strategy_buckchg_select_charg_para(struct strategy_buckchg_dev *info)
 					   .max_current;
 			if (pdo_curr == 0) {
 				int ucsi_ma = strategy_buckchg_get_ucsi_curr_ma();
+				unsigned int pps_ma = 0;
 
 				if (ucsi_ma >= DEFAULT_PD_CURRENT_MA) {
 					pdo_curr = (unsigned int)ucsi_ma;
 					mca_log_info(
-						"pdo empty, using ucsi current_max=%u mA\n",
+						"pdo empty, using ucsi curr=%u mA\n",
+						pdo_curr);
+				} else if (!protocol_class_pd_get_pps_max_cur(
+						   TYPEC_PORT_0, &pps_ma) &&
+					   pps_ma >= DEFAULT_PD_CURRENT_MA) {
+					pdo_curr = pps_ma;
+					mca_log_info(
+						"pdo empty, using pps_max_cur=%u mA\n",
 						pdo_curr);
 				} else {
-					pdo_curr = DEFAULT_PD_CURRENT_MA;
+					/*
+					 * Active PD/PPS link with empty PDO & UCSI tables:
+					 * fall back to DCP ceiling (AICL-protected) instead
+					 * of starving the pack at 500 mA.
+					 */
+					pdo_curr = info->in_dcp;
 					mca_log_info(
-						"pdo broadcast abnormal %d\n",
-						info->proc_data.curr_pd_pos);
+						"pdo/ucsi empty (%d), fallback in_dcp=%u mA\n",
+						info->proc_data.curr_pd_pos,
+						pdo_curr);
 				}
 			}
 
@@ -2100,7 +2118,7 @@ strategy_buckchg_check_charge_volt(struct strategy_buckchg_dev *info)
 	}
 
 	if ((info->proc_data.real_type >= XM_CHARGER_TYPE_PD &&
-	     info->proc_data.real_type <= XM_CHARGER_TYPE_PD_VERIFY) &&
+	     info->proc_data.real_type <= XM_CHARGER_TYPE_PPS) &&
 	    !info->pwr_cap.nums) {
 		mca_log_info("pd pwr_cap nums is null\n");
 		return;
@@ -2300,7 +2318,9 @@ strategy_buckchg_enable_fast_charge_mode(struct strategy_buckchg_dev *info,
 			mca_log_info("iterm: %d\n", iterm);
 
 			if (info->base_flip_same && fastcharge_mode &&
-			    info->proc_data.real_type == XM_CHARGER_TYPE_PPS) {
+			    (info->proc_data.real_type == XM_CHARGER_TYPE_PPS ||
+			     info->proc_data.real_type ==
+				     XM_CHARGER_TYPE_PD_VERIFY)) {
 				int temp_offset_flag = 0;
 				int in_limit;
 
@@ -2328,7 +2348,8 @@ strategy_buckchg_enable_fast_charge_mode(struct strategy_buckchg_dev *info,
 	mca_log_info("allow_start_ffc_batt_soc_thr: %d\n",
 		     info->allow_start_ffc_batt_soc_thr);
 
-	if (info->proc_data.real_type == XM_CHARGER_TYPE_PPS) {
+	if (info->proc_data.real_type == XM_CHARGER_TYPE_PPS ||
+	    info->proc_data.real_type == XM_CHARGER_TYPE_PD_VERIFY) {
 		if (info->ffc_terminated_by_cp)
 			(void)mca_strategy_func_get_status(
 				STRATEGY_FUNC_TYPE_QUICK_CHARGE,
@@ -2945,7 +2966,7 @@ strategy_buckchg_process_wireless_revchg(struct strategy_buckchg_dev *info)
 	int ret = 0;
 
 	if (real_type < XM_CHARGER_TYPE_DCP ||
-	    real_type > XM_CHARGER_TYPE_PD_VERIFY)
+	    real_type > XM_CHARGER_TYPE_PPS)
 		return -1;
 
 	if (real_type == XM_CHARGER_TYPE_PD) {

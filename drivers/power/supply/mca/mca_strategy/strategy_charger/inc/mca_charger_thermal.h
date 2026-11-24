@@ -123,9 +123,10 @@ struct mca_sic_data {
  * 15600 mA here even with the daemon asking for more. Raised to match the
  * div4 ceiling in onyx-charger-common.dtsi (div_max_curr).
  */
-#define POWER_MAX_LIST 4
+#define POWER_MAX_LIST 5
 struct mca_sic_data sic_init_list[POWER_MAX_LIST] = {
 	{ 33, 6600 },
+	{ 45, 11000 },
 	{ 67, 15600 },
 	{ 90, 20000 },
 	{ 120, 22000 },

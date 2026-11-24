@@ -371,11 +371,35 @@ static void business_charger_wireless_reset_rx_work(struct work_struct *work)
 	}
 }
 
+static inline bool mca_bc_is_pps_type(int type)
+{
+	return (type == XM_CHARGER_TYPE_PPS ||
+		type == XM_CHARGER_TYPE_PD_VERIFY);
+}
+
 static void
 business_charger_process_cap_change(struct business_charger *charger,
 				    unsigned int event)
 {
-	if (charger->real_type == XM_CHARGER_TYPE_PPS) {
+	int prev_type = charger->real_type;
+
+	(void)update_usb_pd_type(charger);
+	if (charger->real_type != prev_type) {
+		mca_strategy_func_process(STRATEGY_FUNC_TYPE_QUICK_CHARGE,
+					  MCA_EVENT_CHARGE_TYPE_CHANGE,
+					  charger->real_type);
+		mca_strategy_func_process(STRATEGY_FUNC_TYPE_BUCK_CHARGE,
+					  MCA_EVENT_CHARGE_TYPE_CHANGE,
+					  charger->real_type);
+		mca_strategy_func_process(STRATEGY_FUNC_TYPE_FG,
+					  MCA_EVENT_CHARGE_TYPE_CHANGE,
+					  charger->real_type);
+		mca_strategy_func_process(STRATEGY_FUNC_TYPE_THERMAL,
+					  MCA_EVENT_CHARGE_TYPE_CHANGE,
+					  charger->real_type);
+	}
+
+	if (mca_bc_is_pps_type(charger->real_type)) {
 		cancel_delayed_work_sync(
 			&charger->report_quick_charge_type_work);
 		schedule_delayed_work(&charger->report_quick_charge_type_work,
@@ -434,7 +458,7 @@ business_charger_report_quick_charge_type_work(struct work_struct *work)
 	int power_max;
 	int icon_type;
 
-	if (charger->real_type != XM_CHARGER_TYPE_PPS)
+	if (!mca_bc_is_pps_type(charger->real_type))
 		return;
 
 	protocol_class_get_adapter_max_power(ADAPTER_PROTOCOL_PPS,
@@ -523,8 +547,14 @@ business_charger_process_type_change(struct business_charger *charger,
 				  charger->real_type);
 	mca_strategy_func_process(STRATEGY_FUNC_TYPE_THERMAL, event,
 				  charger->real_type);
-	if (charger->real_type != XM_CHARGER_TYPE_PPS)
+	if (!mca_bc_is_pps_type(charger->real_type))
 		business_charger_update_wired_quick_charge_type(charger);
+	else {
+		cancel_delayed_work_sync(
+			&charger->report_quick_charge_type_work);
+		schedule_delayed_work(&charger->report_quick_charge_type_work,
+				      0);
+	}
 }
 
 static void business_charger_process_wireless_online_change(
@@ -804,9 +834,12 @@ business_charger_process_handle_logic(struct business_charger *charger)
 				n_data.event_len = 32;
 				mca_event_report_uevent(&n_data);
 			}
-		} else if (charger->real_type != XM_CHARGER_TYPE_PPS) {
+		} else if (!mca_bc_is_pps_type(charger->real_type)) {
 			business_charger_update_wired_quick_charge_type(
 				charger);
+		} else {
+			schedule_delayed_work(
+				&charger->report_quick_charge_type_work, 0);
 		}
 	}
 }
@@ -968,7 +1001,7 @@ business_charger_process_csd_pulse_change(struct business_charger *charger,
 {
 	int csd_pulse = *((int *)data);
 
-	if (charger->real_type == XM_CHARGER_TYPE_PPS) {
+	if (mca_bc_is_pps_type(charger->real_type)) {
 		mca_log_info("receive csd pulse request: %d\n", csd_pulse);
 		mca_strategy_func_process(STRATEGY_FUNC_TYPE_QUICK_CHARGE,
 					  event, csd_pulse);
@@ -1029,7 +1062,7 @@ business_charger_process_batt_health_change(struct business_charger *charger,
 					    unsigned int event)
 {
 	business_charger_update_wired_quick_charge_type(charger);
-	if (charger->real_type == XM_CHARGER_TYPE_PPS)
+	if (mca_bc_is_pps_type(charger->real_type))
 		schedule_delayed_work(&charger->report_quick_charge_type_work,
 				      0);
 	mca_strategy_func_process(STRATEGY_FUNC_TYPE_BASIC_WIRELESS, event, 0);

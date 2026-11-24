@@ -746,32 +746,22 @@ static int protocol_class_pps_adapter_get_max_power(void *data, unsigned int *ma
 	mca_log_info("is_eu_model: %d,device_max_power: %d, max_power: %d, adv_curr: %d\n",
 		is_eu_model, device_max_power, power, adv_curr);
 
-	if (type == XM_CHARGER_TYPE_PD_VERIFY) {
-		*max_power = min(power, device_max_power);
-		mca_log_info("universal pps max_power %d (raw %d, dev %d)\n",
-			     *max_power, power, device_max_power);
-		return 0;
+	/*
+	 * Preserve exact negotiated APDO wattage across both Xiaomi and 3rd-party
+	 * USB-PD PPS adapters/cables (bounded by device_max_power). Only apply
+	 * Xiaomi's 110V-AC 96W -> 100W/120W normalization without ever downgrading
+	 * mid-tier adapters (e.g. 45W Samsung/Anker/UGREEN PPS -> 33W).
+	 */
+	if (type == XM_CHARGER_TYPE_PPS) {
+		if (power >= 96 && (adv_curr == 4800 || adv_curr == 5000))
+			power = max(power, MCA_APDO_MAX_100W);
+		else if (power >= 96 && power < 130)
+			power = max(power, MCA_APDO_MAX_120W);
 	}
 
-	// 96 is for 110V AC voltage when used in some foreigns
-	if ((power >= 96 && adv_curr == 4800) || (power >= 96 && adv_curr == 5000))
-		power = MCA_APDO_MAX_100W;
-	else if (power >= 96 && power < 130)
-		power = MCA_APDO_MAX_120W;
-	else if (power >= 70 && power < 96)
-		power = MCA_APDO_MAX_90W;
-	else if (power >= 66 && power < 70)
-		power = MCA_APDO_MAX_67W;
-	else if (power >= 60 && power < 66)
-		power = MCA_APDO_MAX_65W;
-	else if (power >= 55 && power < 60)
-		power = MCA_APDO_MAX_55W;
-	else if (power >= 50 && power < 55)
-		power = MCA_APDO_MAX_50W;
-	else // other such as 40W, we do not show the animaton below 50w
-		power = MCA_APDO_MAX_33W;
-
 	*max_power = min(power, device_max_power);
+	mca_log_info("universal pps max_power %d (raw %d, dev %d, type %d)\n",
+		     *max_power, power, device_max_power, type);
 	return 0;
 }
 
@@ -906,14 +896,14 @@ static ssize_t pd_class_sysfs_store(struct device *dev,
 
 static struct mca_sysfs_attr_info pd_class_sysfs_field_tbl[] = {
 	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_CC_ORIENTATION, cc_orientation),
-	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_APDO_MAX, apdo_max),
+	mca_sysfs_attr_ro(pd_class_sysfs, 0444, PD_PROP_APDO_MAX, apdo_max),
 	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_HAS_DP, has_dp),
 	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_CID_STATUS, cid_status),
 	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_OTG_UI_SUPPORT, otg_ui_support),
 	mca_sysfs_attr_rw(pd_class_sysfs, 0640, PD_PROP_CC_TOGGLE, cc_toggle),
 	mca_sysfs_attr_rw(pd_class_sysfs, 0640, PD_PROP_PPS_PTF, pps_ptf),
 	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_CC_SHORT_VBUS, cc_short_vbus),
-	mca_sysfs_attr_ro(pd_class_sysfs, 0440, PD_PROP_TYPEC_MODE, typec_mode),
+	mca_sysfs_attr_ro(pd_class_sysfs, 0444, PD_PROP_TYPEC_MODE, typec_mode),
 };
 
 #define PD_SYSFS_ATTRS_SIZE   ARRAY_SIZE(pd_class_sysfs_field_tbl)

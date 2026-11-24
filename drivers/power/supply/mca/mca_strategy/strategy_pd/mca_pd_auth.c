@@ -321,21 +321,26 @@ static ssize_t strategy_pd_auth_sysfs_store(struct device *dev,
 				&info->verify_porcess_end);
 		}
 		break;
-	case PD_AUTH_USBPD_VERIFIED:
+	case PD_AUTH_USBPD_VERIFIED: {
+		int verified = 0;
+
 		if (sscanf(buf, "%d\n", &value) != 1) {
 			mca_log_err("verified value invalid %s\n", buf);
 			return -EINVAL;
 		}
 		mca_log_info("set pd verified %d\n", value);
 		(void)protocol_class_pd_set_pd_verifed(active_port, value);
-		if (value) {
+		(void)protocol_class_pd_get_pd_verifed(active_port, &verified);
+		if (verified) {
 			info->pd_verified_type = XM_CHARGER_TYPE_PD_VERIFY;
 			mca_event_block_notify(MCA_EVENT_TYPE_CHARGE_TYPE,
 					       MCA_EVENT_CHARGE_TYPE_CHANGE,
 					       &info->pd_verified_type);
-		} else
+		} else {
 			strategy_pd_auth_fail_report_dfx();
+		}
 		break;
+	}
 	case PD_AUTH_USBPD_DATA_ROLE:
 		mca_log_info("set data_role: %s\n", buf);
 		if (strncmp(buf, "ufp", 3) == 0)

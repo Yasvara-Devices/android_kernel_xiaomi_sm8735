@@ -2377,7 +2377,7 @@ mca_eu_pps_anti_disconnection_strategy(struct mca_quick_charge_info *info)
 		return;
 	}
 
-	if (info->proc_data.adp_type != XM_CHARGER_TYPE_PD_VERIFY)
+	if (!mca_qc_is_pps_type(info->proc_data.adp_type))
 		return;
 
 	if (info->proc_data.ibus >= info->proc_data.max_adp_curr - 200) {
@@ -2732,8 +2732,7 @@ strategy_quickchg_pmic_single_cp_charging(struct mca_quick_charge_info *info,
 	int fcc, icl, i;
 
 	if (!fastcharge && (cur_max < SINGLE_CP_CUR_MAX_TH ||
-			    info->proc_data.adp_type !=
-				    XM_CHARGER_TYPE_PD_VERIFY)) {
+			    !mca_qc_is_pps_type(info->proc_data.adp_type))) {
 		mca_vote_override(info->term_volt_voter, "single_cp_pmic",
 				  false, 0);
 		info->ffc_final_vterm = 0;
@@ -3443,7 +3442,7 @@ static void mca_quick_charge_pps_ptf_work(struct work_struct *work)
 		work, struct mca_quick_charge_info, pps_ptf_work.work);
 	static int check_mum;
 
-	if ((info->proc_data.adp_type == XM_CHARGER_TYPE_PD_VERIFY &&
+	if ((mca_qc_is_pps_type(info->proc_data.adp_type) &&
 	     info->is_eu_model) ||
 	    info->fake_pps_ptf) {
 		protocol_class_get_adapter_pps_ptf(info->proc_data.cur_protocol,
@@ -3720,7 +3719,7 @@ static int mca_quick_charge_process_event(int event, int value, void *data)
 				msecs_to_jiffies(
 					MCA_QUICK_CHG_PPS_PTF_INTERVAL));
 
-		if (value == XM_CHARGER_TYPE_PPS && info->is_eu_model)
+		if (mca_qc_is_pps_type(value) && info->is_eu_model)
 			schedule_delayed_work(
 				&info->pps_ptf_work,
 				msecs_to_jiffies(

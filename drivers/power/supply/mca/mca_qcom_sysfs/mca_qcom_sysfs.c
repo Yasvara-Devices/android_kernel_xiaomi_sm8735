@@ -5,6 +5,7 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <mca/common/mca_log.h>
+#include <mca/common/mca_event.h>
 #include <mca/protocol/protocol_class.h>
 #include <mca/protocol/protocol_pd_class.h>
 #include <mca/strategy/strategy_class.h>
@@ -138,6 +139,8 @@ static ssize_t pd_verifed_store(const struct class *class,
 				const char *buf, size_t count)
 {
 	int val = 0;
+	int verified = 0;
+	int pd_type = XM_CHARGER_TYPE_PD_VERIFY;
 	int ret;
 
 	if (kstrtoint(buf, 10, &val))
@@ -146,6 +149,11 @@ static ssize_t pd_verifed_store(const struct class *class,
 	ret = protocol_class_set_adapter_verified(ADAPTER_PROTOCOL_PD, val);
 	if (ret < 0)
 		return ret;
+	(void)protocol_class_get_adapter_verified(ADAPTER_PROTOCOL_PD,
+						  &verified);
+	if (verified)
+		mca_event_block_notify(MCA_EVENT_TYPE_CHARGE_TYPE,
+				       MCA_EVENT_CHARGE_TYPE_CHANGE, &pd_type);
 	return count;
 }
 static CLASS_ATTR_RW(pd_verifed);
@@ -183,10 +191,21 @@ static ssize_t power_max_show(const struct class *class,
 
 	mca_strategy_func_get_status(STRATEGY_FUNC_TYPE_QUICK_WIRELESS,
 				     STRATEGY_STATUS_TYPE_ONLINE, &wls_online);
-	if (wls_online != 0)
+	if (wls_online != 0) {
 		mca_strategy_func_get_status(STRATEGY_FUNC_TYPE_QUICK_WIRELESS,
 					     STRATEGY_STATUS_TYPE_POWER_MAX,
 					     &power);
+	} else {
+		unsigned int pps_power = 0;
+
+		mca_strategy_func_get_status(STRATEGY_FUNC_TYPE_QUICK_CHARGE,
+					     STRATEGY_STATUS_TYPE_POWER_MAX,
+					     &power);
+		if (power <= 0 &&
+		    !protocol_class_get_adapter_max_power(ADAPTER_PROTOCOL_PPS,
+							  &pps_power))
+			power = (int)pps_power;
+	}
 	return snprintf(buf, PAGE_SIZE, "%d\n", power);
 }
 static CLASS_ATTR_RO(power_max);

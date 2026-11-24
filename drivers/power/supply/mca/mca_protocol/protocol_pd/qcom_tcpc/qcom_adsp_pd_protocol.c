@@ -59,9 +59,23 @@ enum adsp_pd_prop {
 #define ADSP_VDM_REQ_INIT 200
 #define ADSP_VDM_REQ_NAK 0xff
 #define ADSP_GLINK_DOWN_CODE 0x2e
+#define ADSP_GLINK_DOWN_CODE_ALT 0x30
 #define ADSP_REAL_TYPE_PD 0x0b
 #define ADSP_PD_TYPE_PD 0x0b
 #define ADSP_PD_TYPE_PD_PPS 0x0c
+
+/*
+ * Universal PD/PPS verification bypass:
+ * When enabled (default), any attached USB-PD / PPS adapter and cable is
+ * automatically marked verified without requiring Xiaomi proprietary UVDM
+ * (SVID 0x2717 / batterysecret) authentication. Hardware safety limits
+ * (negotiated PDO/APDO ceilings, SC8581 OCP/OVP/tdie, JEITA, antiburn)
+ * remain strictly enforced.
+ */
+static bool pd_verify_bypass = true;
+module_param(pd_verify_bypass, bool, 0644);
+MODULE_PARM_DESC(pd_verify_bypass,
+		 "Auto-verify all PD/PPS adapters and cables without UVDM auth");
 
 struct adsp_pd_protocol {
 	struct device *dev;
@@ -71,6 +85,37 @@ struct adsp_pd_protocol {
 	struct notifier_block abnormal_nb;
 	int verify_process;
 };
+
+static bool adsp_pd_has_pps_apdo(void)
+{
+	struct pd_pdo pdos[PROTOCOL_PD_MAX_PDO_NUMS] = { 0 };
+	int ret, i;
+
+	ret = mca_adsp_glink_read_prop(PD_PROP_PDOS, pdos, sizeof(pdos));
+	if (ret != 0)
+		return false;
+
+	for (i = 0; i < PROTOCOL_PD_MAX_PDO_NUMS; i++) {
+		if (pdos[i].min_volt > 0 &&
+		    pdos[i].max_volt > pdos[i].min_volt &&
+		    pdos[i].max_current > 0)
+			return true;
+	}
+	return false;
+}
+
+static void adsp_pd_auto_verify(struct adsp_pd_protocol *pd)
+{
+	int val = 1;
+
+	if (!pd || !pd_verify_bypass || pd->pd_verifed)
+		return;
+
+	pd->pd_verifed = 1;
+	pd->verify_process = 0;
+	mca_adsp_glink_write_prop(PD_PROP_PD_VERIFIED, &val, sizeof(val));
+	mca_log_info("pd_verify_bypass: auto-verified PD/PPS adapter\n");
+}
 
 static int adsp_pd_protocol_get_pps_max_power(unsigned int *max_power,
 					      void *data)
@@ -101,7 +146,7 @@ static int adsp_pd_protocol_set_fixed_pd_volt(int volt, void *data)
 	int val = volt;
 
 	mca_log_info("vbus_mv: %d\n", volt);
-	if (pd->verify_process) {
+	if (pd->verify_process && !pd_verify_bypass) {
 		mca_log_err("pd verify processing, won't set fixed pd volt\n");
 		return 0;
 	}
@@ -189,11 +234,18 @@ static int adsp_pd_protocol_get_pd_type(int *type, void *data)
 	ret = mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
 				       sizeof(real_type));
 	if (ret == 0) {
-		if (real_type == ADSP_REAL_TYPE_PD)
+		if (real_type == ADSP_REAL_TYPE_PD) {
+			if (pd_verify_bypass)
+				adsp_pd_auto_verify(pd);
 			*type = pd->pd_verifed ? ADSP_PD_TYPE_PD_PPS :
 						 ADSP_PD_TYPE_PD;
-		else
+		} else if (real_type == XM_CHARGER_TYPE_PD &&
+			   pd_verify_bypass && adsp_pd_has_pps_apdo()) {
+			adsp_pd_auto_verify(pd);
+			*type = ADSP_PD_TYPE_PD_PPS;
+		} else {
 			*type = 0;
+		}
 	}
 	return ret;
 }
@@ -203,7 +255,7 @@ static int adsp_pd_protocol_set_verify_process(int verify_process, void *data)
 	struct adsp_pd_protocol *pd = data;
 	int val = verify_process;
 
-	pd->verify_process = verify_process;
+	pd->verify_process = pd_verify_bypass ? 0 : verify_process;
 	mca_log_err("verify_process: %d\n", verify_process);
 	return mca_adsp_glink_write_prop(PD_PROP_VERIFY_PROCESS, &val,
 					 sizeof(val));
@@ -219,9 +271,22 @@ static int adsp_pd_protocol_set_pd_verifed(int pd_verifed, void *data)
 {
 	struct adsp_pd_protocol *pd = data;
 	int val = pd_verifed;
+	int real_type = 0;
 
-	mca_log_err("set pd_verifed: %d\n", pd_verifed);
-	pd->pd_verifed = pd_verifed;
+	if (pd_verify_bypass && !val) {
+		if (!mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
+					      sizeof(real_type)) &&
+		    (real_type == ADSP_REAL_TYPE_PD ||
+		     real_type == XM_CHARGER_TYPE_PD)) {
+			mca_log_info(
+				"pd_verify_bypass: overriding pd_verifed 0 -> 1 (real_type=%d)\n",
+				real_type);
+			val = 1;
+		}
+	}
+
+	mca_log_err("set pd_verifed: %d\n", val);
+	pd->pd_verifed = val;
 	return mca_adsp_glink_write_prop(PD_PROP_PD_VERIFIED, &val,
 					 sizeof(val));
 }
@@ -229,6 +294,15 @@ static int adsp_pd_protocol_set_pd_verifed(int pd_verifed, void *data)
 static int adsp_pd_protocol_get_pd_verifed(int *pd_verifed, void *data)
 {
 	struct adsp_pd_protocol *pd = data;
+	int real_type = 0;
+
+	if (pd_verify_bypass && !pd->pd_verifed) {
+		if (!mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
+					      sizeof(real_type)) &&
+		    (real_type == ADSP_REAL_TYPE_PD ||
+		     real_type == XM_CHARGER_TYPE_PD))
+			adsp_pd_auto_verify(pd);
+	}
 
 	mca_log_info("get verifed %d\n", pd->pd_verifed);
 	*pd_verifed = pd->pd_verifed;
@@ -547,7 +621,8 @@ static int adsp_pd_protocol_abnormal_cb(struct notifier_block *nb,
 	struct adsp_pd_protocol *pd =
 		container_of(nb, struct adsp_pd_protocol, abnormal_nb);
 
-	if (action == ADSP_GLINK_DOWN_CODE)
+	if (action == ADSP_GLINK_DOWN_CODE ||
+	    action == ADSP_GLINK_DOWN_CODE_ALT)
 		pd->pd_verifed = 0;
 	return 0;
 }

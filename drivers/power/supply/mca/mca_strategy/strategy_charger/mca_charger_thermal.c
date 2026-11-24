@@ -1207,14 +1207,23 @@ mca_charger_thermal_sic_initial_chg_curr(struct mca_thermal_info *info)
 			protocol_class_get_adapter_max_power(
 				ADAPTER_PROTOCOL_PPS,
 				(unsigned int *)(&power_max));
-		info->wired_ctrl_info.sic_init_fcc =
-			sic_init_list[POWER_MAX_LIST - 1].sic_init_fcc;
-		for (int i = 0; i < POWER_MAX_LIST; i++) {
-			if (power_max <= sic_init_list[i].power_max) {
-				info->wired_ctrl_info.sic_init_fcc =
-					sic_init_list[i].sic_init_fcc;
-				break;
+		if (power_max > 0) {
+			info->wired_ctrl_info.sic_init_fcc =
+				sic_init_list[POWER_MAX_LIST - 1].sic_init_fcc;
+			for (int i = 0; i < POWER_MAX_LIST; i++) {
+				if (power_max <= sic_init_list[i].power_max) {
+					info->wired_ctrl_info.sic_init_fcc =
+						sic_init_list[i].sic_init_fcc;
+					break;
+				}
 			}
+		} else {
+			/*
+			 * PDOs/APDOs not populated yet: leave sic_init_fcc unset (0)
+			 * instead of matching sic_init_list[0] (33W / 6.6A) and
+			 * throttling high-wattage adapters until CAP_CHANGE arrives.
+			 */
+			info->wired_ctrl_info.sic_init_fcc = 0;
 		}
 		mca_charger_thermal_update_chg_curr(info);
 
@@ -1294,6 +1303,9 @@ static int mca_charger_thermal_process_event(int event, int value, void *data)
 		break;
 	case MCA_EVENT_CHARGE_TYPE_CHANGE:
 		info->real_type = value;
+		mca_charger_thermal_sic_initial_chg_curr(info);
+		break;
+	case MCA_EVENT_CHARGE_CAP_CHANGE:
 		mca_charger_thermal_sic_initial_chg_curr(info);
 		break;
 	case MCA_EVENT_WIRELESS_CONNECT:
