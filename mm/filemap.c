@@ -994,7 +994,7 @@ unlock:
 		 * Lock has been dropped: start again with the original index
 		 * and order (but now with the memory reserved by xas_nomem()).
 		 */
-		xas_set_order(&xas, index, forder);
+		xas_set_order(&xas, index, order);
 	}
 
 	if (xas_error(&xas))

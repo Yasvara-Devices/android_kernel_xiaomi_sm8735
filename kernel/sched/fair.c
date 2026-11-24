@@ -889,7 +889,6 @@ static inline void min_vruntime_copy(struct sched_entity *new, struct sched_enti
 {
 	new->min_vruntime = old->min_vruntime;
 	new->min_slice = old->min_slice;
-	new->max_slice = old->max_slice;
 }
 
 /*
