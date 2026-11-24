@@ -773,10 +773,12 @@ void ufs_qcom_phy_set_src_clk_h8_enter(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy *ufs_qcom_phy = get_ufs_qcom_phy(generic_phy);
 	struct device *dev = ufs_qcom_phy->dev;
+	struct clk *xo_clk = ufs_qcom_phy->ref_clk_parent ? :
+			     ufs_qcom_phy->ref_clk_src;
 	int err;
 
 	if (!ufs_qcom_phy->rx_sym0_mux_clk || !ufs_qcom_phy->rx_sym1_mux_clk ||
-		!ufs_qcom_phy->tx_sym0_mux_clk || !ufs_qcom_phy->ref_clk_src)
+		!ufs_qcom_phy->tx_sym0_mux_clk || !xo_clk)
 		return;
 
 	/*
@@ -784,20 +786,17 @@ void ufs_qcom_phy_set_src_clk_h8_enter(struct phy *generic_phy)
 	 * clocks according to the UFS Host Controller Hardware
 	 * Programming Guide's "Hibernate enter with power collapse".
 	 */
-	err = clk_set_parent(ufs_qcom_phy->rx_sym0_mux_clk,
-			     ufs_qcom_phy->ref_clk_src);
+	err = clk_set_parent(ufs_qcom_phy->rx_sym0_mux_clk, xo_clk);
 	if (err)
 		dev_err_ratelimited(dev, "%s: fail rx_sym0_mux_clk %d\n",
 			__func__, err);
 
-	err = clk_set_parent(ufs_qcom_phy->rx_sym1_mux_clk,
-			     ufs_qcom_phy->ref_clk_src);
+	err = clk_set_parent(ufs_qcom_phy->rx_sym1_mux_clk, xo_clk);
 	if (err)
 		dev_err_ratelimited(dev, "%s: fail rx_sym1_mux_clk %d\n",
 			__func__, err);
 
-	err = clk_set_parent(ufs_qcom_phy->tx_sym0_mux_clk,
-			     ufs_qcom_phy->ref_clk_src);
+	err = clk_set_parent(ufs_qcom_phy->tx_sym0_mux_clk, xo_clk);
 	if (err)
 		dev_err_ratelimited(dev, "%s: fail tx_sym0_mux_clk %d\n",
 			__func__, err);
