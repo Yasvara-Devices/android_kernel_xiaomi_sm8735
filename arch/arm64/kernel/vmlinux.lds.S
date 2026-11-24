@@ -188,6 +188,9 @@ SECTIONS
 		*(.interp .dynamic)
 		*(.dynsym .dynstr .hash .gnu.hash)
 		*(.ARM.attributes)
+#ifndef CONFIG_UNWIND_TABLES
+		*(.eh_frame)
+#endif
 	}
 
 	. = KIMAGE_VADDR;
