@@ -1144,7 +1144,7 @@ static bool zram_can_store_page(struct zram *zram)
 static int zram_populate_table(struct zram *zram, struct page *page, u32 index)
 {
 	unsigned long handle;
-	void *src, *dst;
+	void *src;
 	u32 size;
 	int err;
 	unsigned long blk_idx;
@@ -1178,9 +1178,7 @@ static int zram_populate_table(struct zram *zram, struct page *page, u32 index)
 	}
 
 	src = kmap_local_page(page);
-	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
-	memcpy(dst, src, size);
-	zs_unmap_object(zram->mem_pool, handle);
+	zs_obj_write(zram->mem_pool, handle, src, size);
 	kunmap_local(src);
 
 	/*
@@ -2508,25 +2506,25 @@ static int read_from_zspool(struct zram *zram, struct page *page, u32 index)
 
 	size = zram_get_obj_size(zram, index);
 
-	if (size != PAGE_SIZE) {
-		prio = zram_get_priority(zram, index);
-		zstrm = zcomp_stream_get(zram->comps[prio]);
-	}
-
-	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
 	if (size == PAGE_SIZE) {
+		src = zs_obj_read_begin(zram->mem_pool, handle, NULL);
 		dst = kmap_local_page(page);
 		copy_page(dst, src);
 		kunmap_local(dst);
+		zs_obj_read_end(zram->mem_pool, handle, src);
 		ret = 0;
 	} else {
+		prio = zram_get_priority(zram, index);
+		zstrm = zcomp_stream_get(zram->comps[prio]);
+		src = zs_obj_read_begin(zram->mem_pool, handle,
+					zstrm->local_copy);
 		dst = kmap_local_page(page);
 		ret = zcomp_decompress(zram->comps[prio], zstrm,
 				       src, size, dst);
 		kunmap_local(dst);
+		zs_obj_read_end(zram->mem_pool, handle, src);
 		zcomp_stream_put(zstrm);
 	}
-	zs_unmap_object(zram->mem_pool, handle);
 	return ret;
 }
 
@@ -2592,7 +2590,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	unsigned long alloced_pages;
 	unsigned long handle = -ENOMEM;
 	unsigned int comp_len = 0;
-	void *src, *dst, *mem;
+	void *src, *mem;
 	struct zcomp_strm *zstrm;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
@@ -2678,17 +2676,14 @@ compress_again:
 		return -ENOMEM;
 	}
 
-	dst = zs_map_object(zram->mem_pool, handle, ZS_MM_WO);
-
 	src = zstrm->buffer;
 	if (comp_len == PAGE_SIZE)
 		src = kmap_local_page(page);
-	memcpy(dst, src, comp_len);
+	zs_obj_write(zram->mem_pool, handle, src, comp_len);
 	if (comp_len == PAGE_SIZE)
 		kunmap_local(src);
 
 	zcomp_stream_put(zstrm);
-	zs_unmap_object(zram->mem_pool, handle);
 	atomic64_add(comp_len, &zram->stats.compr_data_size);
 out:
 	zram_slot_lock(zram, index);
@@ -2804,7 +2799,7 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 	unsigned int class_index_old;
 	unsigned int class_index_new;
 	u32 num_recomps = 0;
-	void *src, *dst;
+	void *src;
 	int ret;
 
 	handle_old = zram_get_handle(zram, index);
@@ -2928,11 +2923,8 @@ static int recompress_slot(struct zram *zram, u32 index, struct page *page,
 		return PTR_ERR((void *)handle_new);
 	}
 
-	dst = zs_map_object(zram->mem_pool, handle_new, ZS_MM_WO);
-	memcpy(dst, zstrm->buffer, comp_len_new);
+	zs_obj_write(zram->mem_pool, handle_new, zstrm->buffer, comp_len_new);
 	zcomp_stream_put(zstrm);
-
-	zs_unmap_object(zram->mem_pool, handle_new);
 
 	zram_free_page(zram, index);
 	zram_set_handle(zram, index, handle_new);
