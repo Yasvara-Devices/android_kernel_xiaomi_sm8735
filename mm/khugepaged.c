@@ -1671,14 +1671,17 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		if (folio_page(folio, i) != page)
 			goto abort;
 
-		nr_batch_ptes = folio_pte_batch(folio, pte, ptent, max_nr_batch_ptes);
+		nr_batch_ptes = folio_pte_batch(folio, addr, pte, ptent,
+						max_nr_batch_ptes,
+						FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY,
+						NULL, NULL, NULL);
 
 		/*
 		 * Must clear entry, or a racing truncate may re-remove it.
 		 * TLB flush can be left until pmdp_collapse_flush() does it.
 		 * PTE dirty? Shmem page is already dirty; file is read-only.
 		 */
-		clear_ptes(mm, addr, pte, nr_batch_ptes);
+		clear_full_ptes(mm, addr, pte, nr_batch_ptes, 0);
 		folio_remove_rmap_ptes(folio, page, nr_batch_ptes, vma);
 		nr_mapped_ptes += nr_batch_ptes;
 	}
