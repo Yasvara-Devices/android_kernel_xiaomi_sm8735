@@ -280,6 +280,12 @@ void security_compute_xperms_decision(u32 ssid, u32 tsid, u16 tclass, u8 driver,
 void security_compute_av_user(u32 ssid, u32 tsid, u16 tclass,
 			      struct av_decision *avd);
 
+/* Yasvara cold-path SELinux shadow policy queries (boot-pristine view for app probes). */
+int yasvara_shadow_context_to_canon(const char *scontext, u32 scontext_len,
+				    char **canon, u32 *canon_len);
+int yasvara_shadow_compute_av_str(const char *scon, const char *tcon,
+				  u16 tclass, struct av_decision *avd);
+
 int security_transition_sid(u32 ssid, u32 tsid, u16 tclass,
 			    const struct qstr *qstr, u32 *out_sid);
 

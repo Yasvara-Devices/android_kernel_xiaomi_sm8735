@@ -166,6 +166,16 @@ config INPUT_EVBUG
 	  To compile this driver as a module, choose M here: the
 	  module will be called evbug.
 
+config YASVARA_BOOTKEY
+	bool "Yasvara early-boot Safe Mode key latch"
+	depends on INPUT && PROC_FS
+	default y
+	help
+	  Captures early-boot hardware shortcuts (Volume Down x3 or
+	  Power + Volume Down hold) before userspace starts and exposes
+	  a one-shot root-only /proc/yasvara_bootkey entry that unregisters
+	  itself permanently once consumed at post-fs-data.
+
 config INPUT_KUNIT_TEST
 	tristate "KUnit tests for Input" if !KUNIT_ALL_TESTS
 	depends on INPUT && KUNIT

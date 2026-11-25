@@ -20,6 +20,7 @@
 #include <linux/fs.h>
 #include <linux/fs_context.h>
 #include <linux/mount.h>
+#include <linux/yasvara_hide.h>
 #include <linux/mutex.h>
 #include <linux/namei.h>
 #include <linux/init.h>
@@ -600,6 +601,17 @@ static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
 	if (length)
 		goto out;
 
+	if (yasvara_is_app_uid()) {
+		int sret = yasvara_shadow_context_to_canon(buf, size, &canon, &len);
+
+		if (sret != -ENOENT) {
+			length = sret;
+			if (length)
+				goto out;
+			goto copy_out;
+		}
+	}
+
 	length = security_context_to_sid(buf, size, &sid, GFP_KERNEL);
 	if (length)
 		goto out;
@@ -608,6 +620,7 @@ static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
 	if (length)
 		goto out;
 
+copy_out:
 	length = -ERANGE;
 	if (len > SIMPLE_TRANSACTION_LIMIT) {
 		pr_err("SELinux: %s:  context size (%u) exceeds "
@@ -838,6 +851,17 @@ static ssize_t sel_write_access(struct file *file, char *buf, size_t size)
 	if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
 		goto out;
 
+	if (yasvara_is_app_uid()) {
+		int sret = yasvara_shadow_compute_av_str(scon, tcon, tclass, &avd);
+
+		if (sret != -ENOENT) {
+			length = sret;
+			if (length)
+				goto out;
+			goto format_avd;
+		}
+	}
+
 	length = security_context_str_to_sid(scon, &ssid, GFP_KERNEL);
 	if (length)
 		goto out;
@@ -848,6 +872,7 @@ static ssize_t sel_write_access(struct file *file, char *buf, size_t size)
 
 	security_compute_av_user(ssid, tsid, tclass, &avd);
 
+format_avd:
 	length = scnprintf(buf, SIMPLE_TRANSACTION_LIMIT,
 			  "%x %x %x %x %u %x",
 			  avd.allowed, 0xffffffff,

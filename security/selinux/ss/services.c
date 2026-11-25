@@ -2218,12 +2218,109 @@ static void selinux_notify_policy_change(u32 seqno)
 	selinux_ima_measure_state_locked();
 }
 
+/* Yasvara: boot-pristine SELinux policy snapshot latched on first post-boot policy reload.
+ * Kept static/out-of-struct for 100% GKI KABI purity. NULL unless a runtime sepolicy.rule
+ * triggered a post-boot reload. */
+static struct selinux_policy __rcu *yasvara_boot_shadow_policy;
+
+int yasvara_shadow_context_to_canon(const char *scontext, u32 scontext_len,
+				    char **canon, u32 *canon_len)
+{
+	struct selinux_policy *shadow;
+	struct context ctx;
+	char *dup;
+	int rc;
+
+	if (!rcu_access_pointer(yasvara_boot_shadow_policy))
+		return -ENOENT;
+
+	dup = kmemdup_nul(scontext, scontext_len, GFP_KERNEL);
+	if (!dup)
+		return -ENOMEM;
+
+	rcu_read_lock();
+	shadow = rcu_dereference(yasvara_boot_shadow_policy);
+	if (!shadow) {
+		rcu_read_unlock();
+		kfree(dup);
+		return -ENOENT;
+	}
+	rc = string_to_context_struct(&shadow->policydb, shadow->sidtab, dup,
+				      &ctx, SECSID_NULL);
+	if (!rc) {
+		rc = context_struct_to_string(&shadow->policydb, &ctx,
+					      canon, canon_len);
+		context_destroy(&ctx);
+	}
+	rcu_read_unlock();
+	kfree(dup);
+	return rc;
+}
+
+int yasvara_shadow_compute_av_str(const char *scon, const char *tcon,
+				  u16 tclass, struct av_decision *avd)
+{
+	struct selinux_policy *shadow;
+	struct context sctx, tctx;
+	char *sdup, *tdup;
+	int rc;
+
+	if (!rcu_access_pointer(yasvara_boot_shadow_policy))
+		return -ENOENT;
+
+	sdup = kstrdup(scon, GFP_KERNEL);
+	tdup = kstrdup(tcon, GFP_KERNEL);
+	if (!sdup || !tdup) {
+		kfree(sdup);
+		kfree(tdup);
+		return -ENOMEM;
+	}
+
+	rcu_read_lock();
+	shadow = rcu_dereference(yasvara_boot_shadow_policy);
+	if (!shadow) {
+		rcu_read_unlock();
+		kfree(sdup);
+		kfree(tdup);
+		return -ENOENT;
+	}
+
+	rc = string_to_context_struct(&shadow->policydb, shadow->sidtab, sdup,
+				      &sctx, SECSID_NULL);
+	if (rc)
+		goto out_unlock;
+
+	rc = string_to_context_struct(&shadow->policydb, shadow->sidtab, tdup,
+				      &tctx, SECSID_NULL);
+	if (rc) {
+		context_destroy(&sctx);
+		goto out_unlock;
+	}
+
+	memset(avd, 0, sizeof(*avd));
+	avd->auditdeny = 0xffffffff;
+	avd->seqno = shadow->latest_granting;
+	if (tclass)
+		context_struct_compute_av(&shadow->policydb, &sctx, &tctx,
+					  tclass, avd, NULL);
+	context_destroy(&tctx);
+	context_destroy(&sctx);
+	rc = 0;
+
+out_unlock:
+	rcu_read_unlock();
+	kfree(sdup);
+	kfree(tdup);
+	return rc;
+}
+
 void selinux_policy_commit(struct selinux_load_state *load_state)
 {
 	struct selinux_state *state = &selinux_state;
 	struct selinux_policy *oldpolicy, *newpolicy = load_state->policy;
 	unsigned long flags;
 	u32 seqno;
+	bool keep_shadow = false;
 
 	oldpolicy = rcu_dereference_protected(state->policy,
 					lockdep_is_held(&state->policy_mutex));
@@ -2248,6 +2345,10 @@ void selinux_policy_commit(struct selinux_load_state *load_state)
 		sidtab_freeze_begin(oldpolicy->sidtab, &flags);
 		rcu_assign_pointer(state->policy, newpolicy);
 		sidtab_freeze_end(oldpolicy->sidtab, &flags);
+		if (!rcu_access_pointer(yasvara_boot_shadow_policy)) {
+			rcu_assign_pointer(yasvara_boot_shadow_policy, oldpolicy);
+			keep_shadow = true;
+		}
 	} else {
 		rcu_assign_pointer(state->policy, newpolicy);
 	}
@@ -2266,9 +2367,10 @@ void selinux_policy_commit(struct selinux_load_state *load_state)
 		trace_android_rvh_selinux_is_initialized(state);
 	}
 
-	/* Free the old policy */
+	/* Free the old policy unless latched as the pristine boot shadow view. */
 	synchronize_rcu();
-	selinux_policy_free(oldpolicy);
+	if (!keep_shadow)
+		selinux_policy_free(oldpolicy);
 	kfree(load_state->convert_data);
 
 	/* Notify others of the policy change */

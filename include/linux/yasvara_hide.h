@@ -93,10 +93,13 @@ static inline bool yasvara_is_forbidden_vma_str_n(const char *s, size_t max_len)
 		YASVARA_LIT("libdobby"),
 		YASVARA_LIT("sandhook"),
 		YASVARA_LIT("libpine"),
+		YASVARA_LIT("yasvara_zygisk"),
+		YASVARA_LIT("libyasvara_zygisk"),
 	};
 	static const u32 vma_first_mask =
 		(1U << ('c' - 'a')) | (1U << ('l' - 'a')) |
-		(1U << ('s' - 'a')) | (1U << ('x' - 'a'));
+		(1U << ('s' - 'a')) | (1U << ('x' - 'a')) |
+		(1U << ('y' - 'a'));
 
 	return yasvara_has_ci_marker_n(s, max_len, vma_markers,
 				       sizeof(vma_markers) / sizeof(vma_markers[0]),
@@ -111,6 +114,9 @@ static inline bool yasvara_is_forbidden_mount_str_n(const char *s, size_t max_le
 		YASVARA_LIT("overlayfs_loop"),
 		YASVARA_LIT("modules.img"),
 		YASVARA_LIT("/data/adb"),
+		YASVARA_LIT("/data/misc/yasvara_root"),
+		YASVARA_LIT("/misc/yasvara_root"),
+		YASVARA_LIT("yasvara_mod"),
 		YASVARA_LIT("magisk"),
 		YASVARA_LIT("kernelsu"),
 		YASVARA_LIT("apatch"),
@@ -121,7 +127,7 @@ static inline bool yasvara_is_forbidden_mount_str_n(const char *s, size_t max_le
 	static const u32 mount_first_mask =
 		YASVARA_SLASH_BIT | (1U << ('a' - 'a')) |
 		(1U << ('k' - 'a')) | (1U << ('m' - 'a')) |
-		(1U << ('o' - 'a'));
+		(1U << ('o' - 'a')) | (1U << ('y' - 'a'));
 
 	return yasvara_has_ci_marker_n(s, max_len, mount_markers,
 				       sizeof(mount_markers) / sizeof(mount_markers[0]),
