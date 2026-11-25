@@ -16,6 +16,11 @@
 #define MCA_LOG_TAG "qcom_adsp_pd"
 #endif
 
+/*
+ * Property IDs of the HOS4 (OS4.0) ADSP charger firmware. HOS3 firmware
+ * numbers everything from VDM_NAK upward 1-3 lower; running the HOS3 table
+ * on HOS4 firmware reads empty PDOs and drops every PPS/fixed-volt request.
+ */
 enum adsp_pd_prop {
 	PD_PROP_USB_REAL_TYPE = 0x2000c,
 	PD_PROP_VERIFY_PROCESS = 0x21002,
@@ -27,63 +32,67 @@ enum adsp_pd_prop {
 	PD_PROP_VDM_VERIFIED = 0x21008,
 	PD_PROP_VDM_REMOVE_COMP = 0x21009,
 	PD_PROP_VDM_REVERSE_AUTH = 0x2100a,
-	PD_PROP_VDM_NAK = 0x2100b,
-	PD_PROP_DATA_ROLE = 0x2100c,
-	PD_PROP_CURRENT_STATE = 0x2100d,
-	PD_PROP_ADAPTER_ID = 0x2100e,
-	PD_PROP_ADAPTER_SVID = 0x2100f,
-	PD_PROP_PD_VERIFIED = 0x21010,
-	PD_PROP_PDOS = 0x21011,
-	PD_PROP_VDM_STATE = 0x21012,
-	PD_PROP_PPS_MAX_CUR = 0x21013,
-	PD_PROP_PPS_APDO_MAX = 0x21014,
-	PD_PROP_TYPEC_MODE = 0x21015,
-	PD_PROP_TYPEC_CC_ORIENT = 0x21016,
-	PD_PROP_SELECT_PPS_PDO = 0x21017,
-	PD_PROP_FIXED_PD_VOLT = 0x21018,
-	PD_PROP_PPS_STATUS = 0x21019,
-	PD_PROP_PPS_MAX_POWER = 0x2101b,
-	PD_PROP_HAS_DP = 0x2101e,
-	PD_PROP_CID_STATUS = 0x2101f,
-	PD_PROP_OTG_PLUGIN = 0x21020,
-	PD_PROP_CC_TOGGLE = 0x21021,
-	PD_PROP_SNK_SRC_MODE = 0x21022,
-	PD_PROP_CC_STATUS = 0x21023,
-	PD_PROP_CC_SHORT_VBUS = 0x21024,
-	PD_PROP_PPS_PTF = 0x21025,
-	PD_PROP_SUSPEND_SUPPORT = 0x21026,
-	PD_PROP_ZIMI_CYPRESS = 0x21027,
-	PD_PROP_GEAR_SHIFT = 0x21028,
+	PD_PROP_VDM_SUPPORT_KEEP_PDO = 0x2100b,
+	PD_PROP_VDM_NAK = 0x2100c,
+	PD_PROP_DATA_ROLE = 0x2100d,
+	PD_PROP_CURRENT_STATE = 0x2100e,
+	PD_PROP_ADAPTER_ID = 0x2100f,
+	PD_PROP_USB_VENDOR_ID = 0x21010,
+	PD_PROP_PRODUCT_VDO = 0x21011,
+	PD_PROP_ADAPTER_SVID = 0x21012,
+	PD_PROP_PD_VERIFIED = 0x21013,
+	PD_PROP_PDOS = 0x21014,
+	PD_PROP_VDM_STATE = 0x21015,
+	PD_PROP_PPS_MAX_CUR = 0x21016,
+	PD_PROP_PPS_APDO_MAX = 0x21017,
+	PD_PROP_TYPEC_MODE = 0x21018,
+	PD_PROP_TYPEC_CC_ORIENT = 0x21019,
+	PD_PROP_SELECT_PPS_PDO = 0x2101a,
+	PD_PROP_FIXED_PD_VOLT = 0x2101b,
+	PD_PROP_PPS_STATUS = 0x2101c,
+	PD_PROP_PPS_MAX_POWER = 0x2101e,
+	PD_PROP_HAS_DP = 0x21021,
+	PD_PROP_CID_STATUS = 0x21022,
+	PD_PROP_OTG_PLUGIN = 0x21023,
+	PD_PROP_CC_TOGGLE = 0x21024,
+	PD_PROP_SNK_SRC_MODE = 0x21025,
+	PD_PROP_CC_STATUS = 0x21026,
+	PD_PROP_CC_SHORT_VBUS = 0x21027,
+	PD_PROP_PPS_PTF = 0x21028,
+	PD_PROP_SUSPEND_SUPPORT = 0x21029,
+	PD_PROP_ZIMI_CYPRESS = 0x2102a,
+	PD_PROP_GEAR_SHIFT = 0x2102b,
 };
 
 #define ADSP_VDM_REQ_INIT 200
+#define ADSP_VDM_REQ_KEEP_PDO 0xfe
 #define ADSP_VDM_REQ_NAK 0xff
 #define ADSP_GLINK_DOWN_CODE 0x2e
 #define ADSP_GLINK_DOWN_CODE_ALT 0x30
 #define ADSP_REAL_TYPE_PD 0x0b
+/* PPS source without Xiaomi UVDM auth (XM_CHARGER_TYPE_PD_VERIFY). */
 #define ADSP_PD_TYPE_PD 0x0b
+/* PPS source that passed Xiaomi UVDM auth (XM_CHARGER_TYPE_PPS). */
 #define ADSP_PD_TYPE_PD_PPS 0x0c
 
 /*
- * Universal PD/PPS verification bypass:
- * When enabled (default), any attached USB-PD / PPS adapter and cable is
- * automatically marked verified without requiring Xiaomi proprietary UVDM
- * (SVID 0x2717 / batterysecret) authentication. Hardware safety limits
- * (negotiated PDO/APDO ceilings, SC8581 OCP/OVP/tdie, JEITA, antiburn)
- * remain strictly enforced.
+ * Classify a source the firmware reports as plain PD as unauthenticated PPS
+ * when its caps carry an APDO, so third-party PPS bricks reach the charge
+ * pump under the non-Xiaomi current caps instead of buck-only.
  */
-static bool pd_verify_bypass = true;
-module_param(pd_verify_bypass, bool, 0644);
-MODULE_PARM_DESC(pd_verify_bypass,
-		 "Auto-verify all PD/PPS adapters and cables without UVDM auth");
+static bool third_party_pps = true;
+module_param(third_party_pps, bool, 0644);
+MODULE_PARM_DESC(third_party_pps,
+		 "Treat plain-PD sources that offer an APDO as unauthenticated PPS");
 
 struct adsp_pd_protocol {
 	struct device *dev;
 	int pd_active;
 	int pd_verifed;
+	int support_keep_pdo;
+	int last_type;
 	struct notifier_block event_nb;
 	struct notifier_block abnormal_nb;
-	int verify_process;
 };
 
 static bool adsp_pd_has_pps_apdo(void)
@@ -104,17 +113,22 @@ static bool adsp_pd_has_pps_apdo(void)
 	return false;
 }
 
-static void adsp_pd_auto_verify(struct adsp_pd_protocol *pd)
+static void adsp_pd_log_type_change(struct adsp_pd_protocol *pd, int real_type,
+				    int type)
 {
-	int val = 1;
+	u32 vid = 0, vdo = 0;
 
-	if (!pd || !pd_verify_bypass || pd->pd_verifed)
+	if (type == pd->last_type)
 		return;
 
-	pd->pd_verifed = 1;
-	pd->verify_process = 0;
-	mca_adsp_glink_write_prop(PD_PROP_PD_VERIFIED, &val, sizeof(val));
-	mca_log_info("pd_verify_bypass: auto-verified PD/PPS adapter\n");
+	pd->last_type = type;
+	if (!type)
+		return;
+
+	(void)mca_adsp_glink_read_prop(PD_PROP_USB_VENDOR_ID, &vid, sizeof(vid));
+	(void)mca_adsp_glink_read_prop(PD_PROP_PRODUCT_VDO, &vdo, sizeof(vdo));
+	mca_log_err("pd type %d (adsp %d, verified %d), vid 0x%04x, product_vdo 0x%08x\n",
+		    type, real_type, pd->pd_verifed, vid & 0xffff, vdo);
 }
 
 static int adsp_pd_protocol_get_pps_max_power(unsigned int *max_power,
@@ -140,16 +154,15 @@ static int adsp_pd_protocol_get_pps_ptf(int *pps_ptf, void *data)
 					sizeof(*pps_ptf));
 }
 
+/*
+ * Not gated on UVDM auth: a request dropped here waits for the next buckchg
+ * monitor tick, and a verify_process that never clears would pin VBUS at 5 V.
+ */
 static int adsp_pd_protocol_set_fixed_pd_volt(int volt, void *data)
 {
-	struct adsp_pd_protocol *pd = data;
 	int val = volt;
 
 	mca_log_info("vbus_mv: %d\n", volt);
-	if (pd->verify_process && !pd_verify_bypass) {
-		mca_log_err("pd verify processing, won't set fixed pd volt\n");
-		return 0;
-	}
 	return mca_adsp_glink_write_prop(PD_PROP_FIXED_PD_VOLT, &val,
 					 sizeof(val));
 }
@@ -233,29 +246,25 @@ static int adsp_pd_protocol_get_pd_type(int *type, void *data)
 
 	ret = mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
 				       sizeof(real_type));
-	if (ret == 0) {
-		if (real_type == ADSP_REAL_TYPE_PD) {
-			if (pd_verify_bypass)
-				adsp_pd_auto_verify(pd);
-			*type = pd->pd_verifed ? ADSP_PD_TYPE_PD_PPS :
-						 ADSP_PD_TYPE_PD;
-		} else if (real_type == XM_CHARGER_TYPE_PD &&
-			   pd_verify_bypass && adsp_pd_has_pps_apdo()) {
-			adsp_pd_auto_verify(pd);
-			*type = ADSP_PD_TYPE_PD_PPS;
-		} else {
-			*type = 0;
-		}
-	}
-	return ret;
+	if (ret)
+		return ret;
+
+	if (real_type == ADSP_REAL_TYPE_PD)
+		*type = pd->pd_verifed ? ADSP_PD_TYPE_PD_PPS : ADSP_PD_TYPE_PD;
+	else if (real_type == XM_CHARGER_TYPE_PD && third_party_pps &&
+		 adsp_pd_has_pps_apdo())
+		*type = ADSP_PD_TYPE_PD;
+	else
+		*type = 0;
+
+	adsp_pd_log_type_change(pd, real_type, *type);
+	return 0;
 }
 
 static int adsp_pd_protocol_set_verify_process(int verify_process, void *data)
 {
-	struct adsp_pd_protocol *pd = data;
 	int val = verify_process;
 
-	pd->verify_process = pd_verify_bypass ? 0 : verify_process;
 	mca_log_err("verify_process: %d\n", verify_process);
 	return mca_adsp_glink_write_prop(PD_PROP_VERIFY_PROCESS, &val,
 					 sizeof(val));
@@ -271,38 +280,22 @@ static int adsp_pd_protocol_set_pd_verifed(int pd_verifed, void *data)
 {
 	struct adsp_pd_protocol *pd = data;
 	int val = pd_verifed;
-	int real_type = 0;
+	int keep_pdo = 0;
+	int ret;
 
-	if (pd_verify_bypass && !val) {
-		if (!mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
-					      sizeof(real_type)) &&
-		    (real_type == ADSP_REAL_TYPE_PD ||
-		     real_type == XM_CHARGER_TYPE_PD)) {
-			mca_log_info(
-				"pd_verify_bypass: overriding pd_verifed 0 -> 1 (real_type=%d)\n",
-				real_type);
-			val = 1;
-		}
-	}
-
-	mca_log_err("set pd_verifed: %d\n", val);
 	pd->pd_verifed = val;
-	return mca_adsp_glink_write_prop(PD_PROP_PD_VERIFIED, &val,
-					 sizeof(val));
+	ret = mca_adsp_glink_write_prop(PD_PROP_PD_VERIFIED, &val, sizeof(val));
+	if (!mca_adsp_glink_read_prop(PD_PROP_VDM_SUPPORT_KEEP_PDO, &keep_pdo,
+				      sizeof(keep_pdo)))
+		pd->support_keep_pdo = keep_pdo;
+	mca_log_err("set pd_verifed: %d, support_keep_pdo: %d\n", val,
+		    pd->support_keep_pdo);
+	return ret;
 }
 
 static int adsp_pd_protocol_get_pd_verifed(int *pd_verifed, void *data)
 {
 	struct adsp_pd_protocol *pd = data;
-	int real_type = 0;
-
-	if (pd_verify_bypass && !pd->pd_verifed) {
-		if (!mca_adsp_glink_read_prop(PD_PROP_USB_REAL_TYPE, &real_type,
-					      sizeof(real_type)) &&
-		    (real_type == ADSP_REAL_TYPE_PD ||
-		     real_type == XM_CHARGER_TYPE_PD))
-			adsp_pd_auto_verify(pd);
-	}
 
 	mca_log_info("get verifed %d\n", pd->pd_verifed);
 	*pd_verifed = pd->pd_verifed;
@@ -443,6 +436,8 @@ static int adsp_pd_protocol_request_vdm_cmd(enum uvdm_state cmd,
 	default:
 		if (cmd == ADSP_VDM_REQ_INIT)
 			prop = PD_PROP_DATA_ROLE;
+		else if (cmd == ADSP_VDM_REQ_KEEP_PDO)
+			prop = PD_PROP_VDM_SUPPORT_KEEP_PDO;
 		else if (cmd == ADSP_VDM_REQ_NAK)
 			prop = PD_PROP_VDM_NAK;
 		else {
@@ -611,7 +606,8 @@ static int adsp_pd_protocol_event_cb(struct notifier_block *nb,
 		return 0;
 
 	pd->pd_verifed = 0;
-	pd->verify_process = 0;
+	pd->support_keep_pdo = 0;
+	pd->last_type = 0;
 	return 0;
 }
 

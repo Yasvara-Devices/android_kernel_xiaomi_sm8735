@@ -930,7 +930,7 @@ static ssize_t pd_class_sysfs_show(struct device *dev,
 	case PD_PROP_APDO_MAX:
 		protocol_class_pps_adapter_get_max_power(NULL, (unsigned int *)(&val));
 		count = scnprintf(buf, PAGE_SIZE, "%d\n", val);
-		mca_log_err("read apdo_max: %d\n", val);
+		mca_log_info("read apdo_max: %d\n", val);
 		break;
 	case PD_PROP_HAS_DP:
 		protocol_class_pd_get_has_dp(g_cur_port, (bool *)(&val));

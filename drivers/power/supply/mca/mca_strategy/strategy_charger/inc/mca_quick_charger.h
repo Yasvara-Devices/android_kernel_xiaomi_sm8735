@@ -502,6 +502,7 @@ struct mca_quick_charge_info {
 	int div_delta_volt[CHG_MODE_MAX];
 	int div_single_curr[CHG_MODE_MAX];
 	int div_max_curr[CHG_MODE_MAX];
+	int non_mi_pps_max_curr[CHG_MODE_MAX];
 	int open_path_th[CHG_MODE_MAX];
 	int multi_ibus_th[CHG_MODE_MAX];
 	int again_multi_ibus_th[CHG_MODE_MAX];

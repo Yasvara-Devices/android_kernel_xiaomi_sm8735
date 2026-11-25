@@ -561,6 +561,15 @@ static inline bool mca_qc_is_pps_type(int adp_type)
 		adp_type == XM_CHARGER_TYPE_PD_VERIFY);
 }
 
+/* PPS sources without Xiaomi UVDM auth run under their own per-mode ceiling. */
+static int mca_qc_mode_max_curr(struct mca_quick_charge_info *info, int mode)
+{
+	if (info->proc_data.adp_type == XM_CHARGER_TYPE_PD_VERIFY)
+		return min(info->div_max_curr[mode],
+			   info->non_mi_pps_max_curr[mode]);
+	return info->div_max_curr[mode];
+}
+
 static int
 mca_quick_charge_adjust_adapter_mode(struct mca_quick_charge_info *info)
 {
@@ -725,7 +734,7 @@ mca_quick_charge_select_cur_work_mode(struct mca_quick_charge_info *info)
 		adp_mode = info->proc_data.adp_info[i].adp_mode;
 		if (info->cur_support_mode & adp_mode &
 		    MCA_QUICK_CHG_MODE_DIV_4) {
-			ibat_tmp = min(info->div_max_curr[CHG_MODE_DIV4],
+			ibat_tmp = min(mca_qc_mode_max_curr(info, CHG_MODE_DIV4),
 				       cap_info->max_current * 4);
 			if (ibat_tmp >= ibat_max[CHG_MODE_DIV4] &&
 			    cap_info->max_current >=
@@ -741,7 +750,7 @@ mca_quick_charge_select_cur_work_mode(struct mca_quick_charge_info *info)
 
 		if (info->cur_support_mode & adp_mode &
 		    MCA_QUICK_CHG_MODE_DIV_2) {
-			ibat_tmp = min(info->div_max_curr[CHG_MODE_DIV2],
+			ibat_tmp = min(mca_qc_mode_max_curr(info, CHG_MODE_DIV2),
 				       cap_info->max_current * 2);
 			if (ibat_tmp >= ibat_max[CHG_MODE_DIV2] &&
 			    cap_info->max_current >=
@@ -757,7 +766,7 @@ mca_quick_charge_select_cur_work_mode(struct mca_quick_charge_info *info)
 
 		if (info->cur_support_mode & adp_mode &
 		    MCA_QUICK_CHG_MODE_DIV_1) {
-			ibat_tmp = min(info->div_max_curr[CHG_MODE_DIV1],
+			ibat_tmp = min(mca_qc_mode_max_curr(info, CHG_MODE_DIV1),
 				       cap_info->max_current * 1);
 			if (ibat_tmp >= ibat_max[CHG_MODE_DIV1] &&
 			    cap_info->max_current >=
@@ -837,7 +846,7 @@ mca_quick_charge_update_work_mode_para(struct mca_quick_charge_info *info)
 			info->div_delta_volt[CHG_MODE_DIV1];
 		info->proc_data.single_curr =
 			info->div_single_curr[CHG_MODE_DIV1];
-		info->proc_data.max_curr = info->div_max_curr[CHG_MODE_DIV1];
+		info->proc_data.max_curr = mca_qc_mode_max_curr(info, CHG_MODE_DIV1);
 		info->proc_data.delta_ibat =
 			info->div_delta_ibat[CHG_MODE_DIV1];
 		info->proc_data.multi_ibus_th =
@@ -862,7 +871,7 @@ mca_quick_charge_update_work_mode_para(struct mca_quick_charge_info *info)
 			info->div_delta_volt[CHG_MODE_DIV2];
 		info->proc_data.single_curr =
 			info->div_single_curr[CHG_MODE_DIV2];
-		info->proc_data.max_curr = info->div_max_curr[CHG_MODE_DIV2];
+		info->proc_data.max_curr = mca_qc_mode_max_curr(info, CHG_MODE_DIV2);
 		info->proc_data.delta_ibat =
 			info->div_delta_ibat[CHG_MODE_DIV2];
 		info->proc_data.multi_ibus_th =
@@ -887,7 +896,7 @@ mca_quick_charge_update_work_mode_para(struct mca_quick_charge_info *info)
 			info->div_delta_volt[CHG_MODE_DIV4];
 		info->proc_data.single_curr =
 			info->div_single_curr[CHG_MODE_DIV4];
-		info->proc_data.max_curr = info->div_max_curr[CHG_MODE_DIV4];
+		info->proc_data.max_curr = mca_qc_mode_max_curr(info, CHG_MODE_DIV4);
 		info->proc_data.delta_ibat =
 			info->div_delta_ibat[CHG_MODE_DIV4];
 		info->proc_data.multi_ibus_th =
@@ -4484,10 +4493,22 @@ mca_quick_charge_parse_chg_mode_info(struct device_node *node,
 	} else {
 		memcpy(info->div_max_curr, idata, sizeof(idata));
 	}
-	mca_log_info("div_delta_volt %d %d %d\n",
+	mca_log_info("div_max_curr %d %d %d\n",
 		     info->div_max_curr[CHG_MODE_DIV1],
 		     info->div_max_curr[CHG_MODE_DIV2],
 		     info->div_max_curr[CHG_MODE_DIV4]);
+
+	ret = mca_parse_dts_u32_array(node, "non_mi_pps_max_curr", idata,
+				      CHG_MODE_MAX);
+	if (ret)
+		memcpy(info->non_mi_pps_max_curr, info->div_max_curr,
+		       sizeof(info->non_mi_pps_max_curr));
+	else
+		memcpy(info->non_mi_pps_max_curr, idata, sizeof(idata));
+	mca_log_info("non_mi_pps_max_curr %d %d %d\n",
+		     info->non_mi_pps_max_curr[CHG_MODE_DIV1],
+		     info->non_mi_pps_max_curr[CHG_MODE_DIV2],
+		     info->non_mi_pps_max_curr[CHG_MODE_DIV4]);
 
 	ret = mca_parse_dts_u32_array(node, "multi_ibus_th", idata,
 				      CHG_MODE_MAX);
