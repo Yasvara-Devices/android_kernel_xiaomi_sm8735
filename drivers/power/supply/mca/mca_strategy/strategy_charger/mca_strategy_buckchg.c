@@ -1296,10 +1296,10 @@ strategy_buckchg_cp_revert_handler(int auth_pos,
 	last_otg_present = otg_present;
 	last_pos = pos;
 
-	if (otg_present) {
-		(void)platform_class_cp_get_chip_vendor(CP_ROLE_MASTER,
-							&info->cp_chip_vendor);
+	(void)platform_class_cp_get_chip_vendor(CP_ROLE_MASTER,
+						&info->cp_chip_vendor);
 
+	if (otg_present) {
 		if (pos == 1 && info->otg_boost_src) {
 			mca_log_err("start external boost");
 
@@ -1386,17 +1386,22 @@ strategy_buckchg_cp_revert_handler(int auth_pos,
 						   CP_MODE_FORWARD_2_1);
 		}
 
-		// close otg
-		msleep(400);
-		otg_enable = 0;
-		otg_enable = (0 << 16) | (2 << 8) | otg_enable;
-		platform_class_buckchg_ops_set_boost_enable(MAIN_BUCK_CHARGER,
-							    otg_enable);
-
-		platform_class_cp_set_adjustadble_timeout(CP_ROLE_MASTER, 40);
+		platform_class_cp_enable_adc(CP_ROLE_MASTER, false);
 		last_otg_present = false;
 		last_pos = 1;
 		info->source_boost_status = 0;
+		info->src_gear_last = 0;
+
+		{
+			char buf[64];
+			struct mca_event_notify_data n;
+
+			n.event_len = snprintf(
+				buf, sizeof(buf),
+				"POWER_SUPPLY_REVERSE_QUICK_CHARGE=%d", 0);
+			n.event = buf;
+			mca_event_report_uevent(&n);
+		}
 	}
 	platform_class_cp_dump_register(CP_ROLE_MASTER);
 }
