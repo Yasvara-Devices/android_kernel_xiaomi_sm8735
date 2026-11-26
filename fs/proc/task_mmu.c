@@ -611,7 +611,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	unsigned long start, end;
 	dev_t dev = 0;
 
-	if (vma->vm_file && yasvara_is_app_uid() &&
+	if (vma->vm_file && yasvara_hide_maps_on() && yasvara_is_app_uid() &&
 	    yasvara_should_hide_vma_file(vma->vm_file))
 		return;
 
@@ -1704,7 +1704,7 @@ static int show_smap(struct seq_file *m, void *v)
 	struct proc_maps_private *priv = m->private;
 	struct vm_area_struct *vma = v;
 	struct mem_size_stats mss = {};
-	bool is_app = yasvara_is_app_uid();
+	bool is_app = yasvara_hide_maps_on() && yasvara_is_app_uid();
 
 	if (is_app && vma->vm_file && yasvara_should_hide_vma_file(vma->vm_file))
 		return 0;
@@ -1774,7 +1774,7 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 	if (!IS_ERR(vma))
 		vma_start = vma->vm_start;
 
-	bool is_app = yasvara_is_app_uid();
+	bool is_app = yasvara_hide_maps_on() && yasvara_is_app_uid();
 
 	while (vma) {
 		if (IS_ERR(vma)) {

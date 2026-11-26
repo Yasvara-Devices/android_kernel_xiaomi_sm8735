@@ -19,6 +19,7 @@
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include "overlayfs.h"
+#include <linux/yasvara_hide.h>
 #include "params.h"
 
 MODULE_AUTHOR("Miklos Szeredi <miklos@szeredi.hu>");
@@ -1364,6 +1365,8 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_op = &ovl_super_operations;
 
 	if (ofs->config.upperdir) {
+		/* A writable overlay (remount scratch, module upper) must stay out of app views. */
+		yasvara_hide_latch_mounts();
 		struct super_block *upper_sb;
 
 		err = -EINVAL;

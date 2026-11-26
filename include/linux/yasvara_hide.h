@@ -222,6 +222,27 @@ static inline void yasvara_fold_exec_smap_fields(unsigned long *shared_clean,
 }
 
 #ifdef __KERNEL__
+#include <linux/jump_label.h>
+
+/*
+ * Off until something exists to hide: one patched NOP per mount line / VMA.
+ * Sources: /sys/kernel/yasvara_hide/{akar,kait} and a latch on writable overlays.
+ */
+DECLARE_STATIC_KEY_FALSE(yasvara_hide_mounts_key);
+DECLARE_STATIC_KEY_FALSE(yasvara_hide_maps_key);
+
+void yasvara_hide_latch_mounts(void);
+
+static __always_inline bool yasvara_hide_mounts_on(void)
+{
+	return static_branch_unlikely(&yasvara_hide_mounts_key);
+}
+
+static __always_inline bool yasvara_hide_maps_on(void)
+{
+	return static_branch_unlikely(&yasvara_hide_maps_key);
+}
+
 static inline bool yasvara_is_app_uid(void)
 {
 	return (from_kuid(&init_user_ns, current_uid()) % 100000) >= 10000;

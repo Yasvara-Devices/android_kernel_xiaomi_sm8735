@@ -113,7 +113,7 @@ static noinline bool yasvara_eval_mount(struct seq_file *m, struct vfsmount *mnt
 	bool is_sys = false;
 
 	*force_ro = false;
-	if (!yasvara_is_app_uid())
+	if (!yasvara_hide_mounts_on() || !yasvara_is_app_uid())
 		return false;
 
 	if (yasvara_should_hide_mount_parts(fstype, NULL, NULL, devname) ||
