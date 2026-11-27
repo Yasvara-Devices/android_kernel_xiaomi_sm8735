@@ -621,7 +621,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 
 		dev = inode->i_sb->s_dev;
 		if (vma_path && vma_path->mnt)
-			dev = yasvara_visible_dev(vma_path->mnt, dev);
+			dev = yasvara_visible_dev_app(vma_path->mnt, dev);
 		ino = inode->i_ino;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 	}

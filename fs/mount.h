@@ -79,6 +79,8 @@ struct mount {
 #endif
 	int mnt_id;			/* mount identifier, reused */
 	u64 mnt_id_unique;		/* mount ID unique until reboot */
+	dev_t yasvara_s_dev;		/* immutable sb->s_dev copy for lockless RCU walks */
+	u8 yasvara_hidden;		/* cached hidden-mount flag (set on create/attach) */
 	int mnt_group_id;		/* peer group identifier */
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	struct hlist_head mnt_pins;

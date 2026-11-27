@@ -14,6 +14,9 @@
 #include <linux/kobject.h>
 #include <linux/kstrtox.h>
 #include <linux/mutex.h>
+#include <linux/rcupdate.h>
+#include <linux/sched.h>
+#include <linux/security.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
 #include <linux/yasvara_hide.h>
@@ -162,3 +165,88 @@ u8 yasvara_classify_hide_dir_slow(const struct path *path)
 		return YASVARA_DIR_NONE;
 	return yasvara_classify_hide_dir_path(resolved);
 }
+
+#ifdef CONFIG_SECURITY_SELINUX
+static bool zygote_sids_ready;
+static u32 sid_zygote;
+static u32 sid_webview_zygote;
+static u32 sid_zygote_next;
+
+/*
+ * Before the policy loads, SELinux maps every context to SECINITSID_KERNEL and reports
+ * success, so a SID only counts once it converts back to the exact context.
+ */
+static u32 yasvara_lookup_sid(const char *ctx, u32 len)
+{
+	u32 sid = 0;
+	char *back = NULL;
+	u32 back_len = 0;
+	bool ok;
+
+	if (security_secctx_to_secid(ctx, len, &sid) || !sid)
+		return 0;
+	if (security_secid_to_secctx(sid, &back, &back_len))
+		return 0;
+	ok = back_len >= len && !memcmp(back, ctx, len) &&
+	     (back_len == len || back[len] == '\0');
+	security_release_secctx(back, back_len);
+	return ok ? sid : 0;
+}
+
+#define YASVARA_SID(ctx) yasvara_lookup_sid(ctx, sizeof(ctx) - 1)
+
+static void yasvara_init_zygote_sids(void)
+{
+	u32 z, wz, zn;
+
+	mutex_lock(&yasvara_hide_lock);
+	if (READ_ONCE(zygote_sids_ready)) {
+		mutex_unlock(&yasvara_hide_lock);
+		return;
+	}
+	z = YASVARA_SID("u:r:zygote:s0");
+	if (z) {
+		wz = YASVARA_SID("u:r:webview_zygote:s0");
+		zn = YASVARA_SID("u:r:zygote_next:s0");
+		WRITE_ONCE(sid_zygote, z);
+		WRITE_ONCE(sid_webview_zygote, wz);
+		WRITE_ONCE(sid_zygote_next, zn);
+		smp_store_release(&zygote_sids_ready, true);
+	}
+	mutex_unlock(&yasvara_hide_lock);
+}
+
+bool yasvara_is_zygote_or_child_slow(void)
+{
+	u32 z, wz, zn;
+	u32 cur_sid = 0, parent_sid = 0;
+	struct task_struct *parent;
+
+	if (unlikely(!smp_load_acquire(&zygote_sids_ready))) {
+		yasvara_init_zygote_sids();
+		if (!smp_load_acquire(&zygote_sids_ready))
+			return false;
+	}
+
+	z = READ_ONCE(sid_zygote);
+	wz = READ_ONCE(sid_webview_zygote);
+	zn = READ_ONCE(sid_zygote_next);
+
+	security_current_getsecid_subj(&cur_sid);
+	if (yasvara_sid_matches_zygote(cur_sid, z, wz, zn))
+		return true;
+
+	rcu_read_lock();
+	parent = rcu_dereference(current->real_parent);
+	if (parent)
+		security_task_getsecid_obj(parent, &parent_sid);
+	rcu_read_unlock();
+
+	return yasvara_sid_matches_zygote(parent_sid, z, wz, zn);
+}
+#else
+bool yasvara_is_zygote_or_child_slow(void)
+{
+	return false;
+}
+#endif

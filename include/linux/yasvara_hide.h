@@ -194,6 +194,24 @@ static inline bool yasvara_is_mount_hidden_fast(const char *fstype,
 	return false;
 }
 
+/*
+ * Matches current or real_parent SELinux SIDs against cached zygote domains so
+ * zygote/webview_zygote/zygote_next and every zygote-forked process (including
+ * UID < 10000 system_server/Settings/Phone/Bluetooth) observe the exact same
+ * normalized st_dev as apps, preventing linker64 (st_dev, st_ino) double-loads.
+ */
+static inline bool yasvara_sid_matches_zygote(u32 sid,
+					      u32 sid_zygote,
+					      u32 sid_webview_zygote,
+					      u32 sid_zygote_next)
+{
+	if (!sid)
+		return false;
+	return (sid_zygote && sid == sid_zygote) ||
+	       (sid_webview_zygote && sid == sid_webview_zygote) ||
+	       (sid_zygote_next && sid == sid_zygote_next);
+}
+
 static inline bool yasvara_is_system_mount_path(const char *target)
 {
 	static const char *const system_prefixes[] = {
@@ -277,14 +295,19 @@ struct yasvara_mnt_view {
 	bool same_root;
 };
 
+bool yasvara_is_zygote_or_child_slow(void);
 void yasvara_resolve_visible_mount(struct vfsmount *vfsmnt,
 				   struct yasvara_mnt_view *out);
 void yasvara_resolve_visible_parent(struct vfsmount *vfsmnt,
 				    int *parent_id,
 				    u64 *parent_id_unique);
+dev_t yasvara_resolve_visible_dev_stat(struct vfsmount *vfsmnt,
+				       dev_t fallback_dev,
+				       bool app_already_checked);
 
-static __always_inline dev_t yasvara_visible_dev(struct vfsmount *vfsmnt,
-						 dev_t fallback_dev)
+/* Atomic/RCU-safe helper for /proc/<pid>/maps (app UIDs only, never sleeps). */
+static __always_inline dev_t yasvara_visible_dev_app(struct vfsmount *vfsmnt,
+						     dev_t fallback_dev)
 {
 	struct yasvara_mnt_view view;
 
@@ -292,6 +315,24 @@ static __always_inline dev_t yasvara_visible_dev(struct vfsmount *vfsmnt,
 		return fallback_dev;
 	yasvara_resolve_visible_mount(vfsmnt, &view);
 	return view.redirected ? view.s_dev : fallback_dev;
+}
+
+/* Sleepable syscall-context helper for vfs_fstat() (apps + zygote lineage). */
+static __always_inline dev_t yasvara_visible_dev_stat(struct vfsmount *vfsmnt,
+						      dev_t fallback_dev)
+{
+	if (likely(!yasvara_hide_mounts_on()))
+		return fallback_dev;
+	return yasvara_resolve_visible_dev_stat(vfsmnt, fallback_dev, false);
+}
+
+/* Sleepable syscall-context helper for non-app branch of vfs_statx_path(). */
+static __always_inline dev_t yasvara_visible_dev_non_app(struct vfsmount *vfsmnt,
+							 dev_t fallback_dev)
+{
+	if (likely(!yasvara_hide_mounts_on()))
+		return fallback_dev;
+	return yasvara_resolve_visible_dev_stat(vfsmnt, fallback_dev, true);
 }
 #endif
 

@@ -233,7 +233,7 @@ int vfs_fstat(int fd, struct kstat *stat)
 		return -EBADF;
 	error = vfs_getattr(&fd_file(f)->f_path, stat, STATX_BASIC_STATS, 0);
 	if (!error)
-		stat->dev = yasvara_visible_dev(fd_file(f)->f_path.mnt, stat->dev);
+		stat->dev = yasvara_visible_dev_stat(fd_file(f)->f_path.mnt, stat->dev);
 	fdput(f);
 	return error;
 }
@@ -264,21 +264,48 @@ static int vfs_statx_path(struct path *path, int flags, struct kstat *stat,
 	if (error)
 		return error;
 
-	{
-		struct yasvara_mnt_view mnt_view;
+	if (unlikely(yasvara_hide_mounts_on())) {
+		if (yasvara_is_app_uid()) {
+			struct yasvara_mnt_view mnt_view;
 
-		yasvara_resolve_visible_mount(path->mnt, &mnt_view);
-		if (mnt_view.redirected)
-			stat->dev = mnt_view.s_dev;
+			yasvara_resolve_visible_mount(path->mnt, &mnt_view);
+			if (mnt_view.redirected)
+				stat->dev = mnt_view.s_dev;
+			if (request_mask & STATX_MNT_ID_UNIQUE) {
+				stat->mnt_id = mnt_view.mnt_id_unique;
+				stat->result_mask |= STATX_MNT_ID_UNIQUE;
+			} else {
+				stat->mnt_id = mnt_view.mnt_id;
+				stat->result_mask |= STATX_MNT_ID;
+			}
+
+			if (path_mounted(path) && (!mnt_view.redirected || mnt_view.same_root))
+				stat->attributes |= STATX_ATTR_MOUNT_ROOT;
+			stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+		} else {
+			stat->dev = yasvara_visible_dev_non_app(path->mnt, stat->dev);
+			if (request_mask & STATX_MNT_ID_UNIQUE) {
+				stat->mnt_id = real_mount(path->mnt)->mnt_id_unique;
+				stat->result_mask |= STATX_MNT_ID_UNIQUE;
+			} else {
+				stat->mnt_id = real_mount(path->mnt)->mnt_id;
+				stat->result_mask |= STATX_MNT_ID;
+			}
+
+			if (path_mounted(path))
+				stat->attributes |= STATX_ATTR_MOUNT_ROOT;
+			stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+		}
+	} else {
 		if (request_mask & STATX_MNT_ID_UNIQUE) {
-			stat->mnt_id = mnt_view.mnt_id_unique;
+			stat->mnt_id = real_mount(path->mnt)->mnt_id_unique;
 			stat->result_mask |= STATX_MNT_ID_UNIQUE;
 		} else {
-			stat->mnt_id = mnt_view.mnt_id;
+			stat->mnt_id = real_mount(path->mnt)->mnt_id;
 			stat->result_mask |= STATX_MNT_ID;
 		}
 
-		if (path_mounted(path) && (!mnt_view.redirected || mnt_view.same_root))
+		if (path_mounted(path))
 			stat->attributes |= STATX_ATTR_MOUNT_ROOT;
 		stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
 	}

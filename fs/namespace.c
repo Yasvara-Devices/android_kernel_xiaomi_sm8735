@@ -1021,6 +1021,29 @@ static void umount_mnt(struct mount *mnt)
 	put_mountpoint(unhash_mnt(mnt));
 }
 
+static bool yasvara_mount_is_hidden_rcu(const struct mount *m)
+{
+	const struct super_block *sb = m->mnt.mnt_sb;
+	const char *fstype = (sb && sb->s_type) ? sb->s_type->name : NULL;
+	const char *devname = m->mnt_devname;
+	const struct dentry *root = m->mnt.mnt_root;
+	const struct dentry *mp = READ_ONCE(m->mnt_mountpoint);
+	const char *root_name = root ? (const char *)smp_load_acquire(&root->d_name.name) : NULL;
+	const char *mp_name = mp ? (const char *)smp_load_acquire(&mp->d_name.name) : NULL;
+
+	return yasvara_is_mount_hidden_fast(fstype, devname, root_name, mp_name);
+}
+
+static void yasvara_refresh_mount_cache(struct mount *m)
+{
+	const struct super_block *sb = m->mnt.mnt_sb;
+
+	WRITE_ONCE(m->yasvara_s_dev, sb ? sb->s_dev : 0);
+	rcu_read_lock();
+	WRITE_ONCE(m->yasvara_hidden, yasvara_mount_is_hidden_rcu(m) ? 1 : 0);
+	rcu_read_unlock();
+}
+
 /*
  * vfsmount lock must be held for write
  */
@@ -1033,6 +1056,7 @@ void mnt_set_mountpoint(struct mount *mnt,
 	child_mnt->mnt_mountpoint = mp->m_dentry;
 	child_mnt->mnt_parent = mnt;
 	child_mnt->mnt_mp = mp;
+	yasvara_refresh_mount_cache(child_mnt);
 	hlist_add_head(&child_mnt->mnt_mp_list, &mp->m_list);
 }
 
@@ -1226,6 +1250,7 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	mnt->mnt.mnt_root	= dget(fc->root);
 	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;
 	mnt->mnt_parent		= mnt;
+	yasvara_refresh_mount_cache(mnt);
 
 	lock_mount_hash();
 	list_add_tail(&mnt->mnt_instance, &mnt->mnt.mnt_sb->s_mounts);
@@ -1322,6 +1347,7 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 	mnt->mnt.mnt_root = dget(root);
 	mnt->mnt_mountpoint = mnt->mnt.mnt_root;
 	mnt->mnt_parent = mnt;
+	yasvara_refresh_mount_cache(mnt);
 	lock_mount_hash();
 	list_add_tail(&mnt->mnt_instance, &sb->s_mounts);
 	unlock_mount_hash();
@@ -2159,6 +2185,7 @@ struct mount *copy_tree(struct mount *src_root, struct dentry *dentry,
 
 	src_parent = src_root;
 	dst_mnt->mnt_mountpoint = src_root->mnt_mountpoint;
+	yasvara_refresh_mount_cache(dst_mnt);
 
 	list_for_each_entry(src_root_child, &src_root->mnt_mounts, mnt_child) {
 		if (!is_subdir(src_root_child->mnt_mountpoint, dentry))
@@ -5084,65 +5111,79 @@ static void statmount_sb_basic(struct kstatmount *s)
 	s->sm.sb_flags = sb->s_flags & (SB_RDONLY|SB_SYNCHRONOUS|SB_DIRSYNC|SB_LAZYTIME);
 }
 
-static bool yasvara_mount_is_hidden_rcu(const struct mount *m)
+static void yasvara_walk_visible_mount_lockless(struct mount *orig,
+						struct yasvara_mnt_view *out)
 {
-	const struct super_block *sb = m->mnt.mnt_sb;
-	const char *fstype = (sb && sb->s_type) ? sb->s_type->name : NULL;
-	const char *devname = m->mnt_devname;
-	const struct dentry *root = m->mnt.mnt_root;
-	const struct dentry *mp = READ_ONCE(m->mnt_mountpoint);
-	const char *root_name = root ? (const char *)smp_load_acquire(&root->d_name.name) : NULL;
-	const char *mp_name = mp ? (const char *)smp_load_acquire(&mp->d_name.name) : NULL;
+	unsigned int seq;
 
-	return yasvara_is_mount_hidden_fast(fstype, devname, root_name, mp_name);
+	rcu_read_lock();
+	do {
+		struct mount *cur = orig;
+		bool same_root = true;
+		int depth;
+
+		seq = read_seqbegin(&mount_lock);
+		for (depth = 0; depth < 32; depth++) {
+			struct mount *parent;
+
+			if (!READ_ONCE(cur->yasvara_hidden))
+				break;
+			parent = READ_ONCE(cur->mnt_parent);
+			if (!parent || parent == cur)
+				break;
+			if (READ_ONCE(cur->mnt_mountpoint) != READ_ONCE(parent->mnt.mnt_root))
+				same_root = false;
+			cur = parent;
+		}
+		out->mnt_id = READ_ONCE(cur->mnt_id);
+		out->mnt_id_unique = READ_ONCE(cur->mnt_id_unique);
+		out->s_dev = READ_ONCE(cur->yasvara_s_dev);
+		out->redirected = (cur != orig);
+		out->same_root = same_root;
+	} while (read_seqretry(&mount_lock, seq));
+	rcu_read_unlock();
 }
 
 void yasvara_resolve_visible_mount(struct vfsmount *vfsmnt,
 				   struct yasvara_mnt_view *out)
 {
 	struct mount *orig = real_mount(vfsmnt);
-	struct mount *cur;
-	bool hidden;
-	bool same_root = true;
-	int depth;
 
 	out->mnt_id = orig->mnt_id;
 	out->mnt_id_unique = orig->mnt_id_unique;
-	out->s_dev = orig->mnt.mnt_sb ? orig->mnt.mnt_sb->s_dev : 0;
+	out->s_dev = READ_ONCE(orig->yasvara_s_dev);
 	out->redirected = false;
 	out->same_root = true;
 
 	if (likely(!yasvara_hide_mounts_on() || !yasvara_is_app_uid()))
 		return;
-
-	rcu_read_lock();
-	hidden = yasvara_mount_is_hidden_rcu(orig);
-	rcu_read_unlock();
-	if (likely(!hidden))
+	if (likely(!READ_ONCE(orig->yasvara_hidden)))
 		return;
 
-	read_seqlock_excl(&mount_lock);
-	rcu_read_lock();
-	cur = orig;
-	for (depth = 0; depth < 32; depth++) {
-		struct mount *parent;
+	yasvara_walk_visible_mount_lockless(orig, out);
+}
 
-		if (!yasvara_mount_is_hidden_rcu(cur))
-			break;
-		parent = cur->mnt_parent;
-		if (!parent || parent == cur)
-			break;
-		if (cur->mnt_mountpoint != parent->mnt.mnt_root)
-			same_root = false;
-		cur = parent;
+dev_t yasvara_resolve_visible_dev_stat(struct vfsmount *vfsmnt,
+				       dev_t fallback_dev,
+				       bool app_already_checked)
+{
+	struct mount *orig = real_mount(vfsmnt);
+	struct yasvara_mnt_view view;
+
+	/* Single cached byte load: rejects non-overlay mounts in ~1 ns without RCU/strings/LSM. */
+	if (likely(!READ_ONCE(orig->yasvara_hidden)))
+		return fallback_dev;
+
+	if (app_already_checked) {
+		if (!yasvara_is_zygote_or_child_slow())
+			return fallback_dev;
+	} else {
+		if (!yasvara_is_app_uid() && !yasvara_is_zygote_or_child_slow())
+			return fallback_dev;
 	}
-	out->mnt_id = cur->mnt_id;
-	out->mnt_id_unique = cur->mnt_id_unique;
-	out->s_dev = cur->mnt.mnt_sb ? cur->mnt.mnt_sb->s_dev : 0;
-	out->redirected = (cur != orig);
-	out->same_root = same_root;
-	rcu_read_unlock();
-	read_sequnlock_excl(&mount_lock);
+
+	yasvara_walk_visible_mount_lockless(orig, &view);
+	return view.redirected ? view.s_dev : fallback_dev;
 }
 
 void yasvara_resolve_visible_parent(struct vfsmount *vfsmnt,
@@ -5150,30 +5191,33 @@ void yasvara_resolve_visible_parent(struct vfsmount *vfsmnt,
 				    u64 *parent_id_unique)
 {
 	struct mount *orig = real_mount(vfsmnt);
-	struct mount *cur;
-	int depth;
+	unsigned int seq;
 
-	read_seqlock_excl(&mount_lock);
 	rcu_read_lock();
-	cur = orig->mnt_parent;
-	for (depth = 0; depth < 32 && cur; depth++) {
-		struct mount *parent;
+	do {
+		struct mount *cur;
+		int depth;
 
-		if (!yasvara_mount_is_hidden_rcu(cur))
-			break;
-		parent = cur->mnt_parent;
-		if (!parent || parent == cur)
-			break;
-		cur = parent;
-	}
-	if (cur) {
-		if (parent_id)
-			*parent_id = cur->mnt_id;
-		if (parent_id_unique)
-			*parent_id_unique = cur->mnt_id_unique;
-	}
+		seq = read_seqbegin(&mount_lock);
+		cur = READ_ONCE(orig->mnt_parent);
+		for (depth = 0; depth < 32 && cur; depth++) {
+			struct mount *parent;
+
+			if (!READ_ONCE(cur->yasvara_hidden))
+				break;
+			parent = READ_ONCE(cur->mnt_parent);
+			if (!parent || parent == cur)
+				break;
+			cur = parent;
+		}
+		if (cur) {
+			if (parent_id)
+				*parent_id = READ_ONCE(cur->mnt_id);
+			if (parent_id_unique)
+				*parent_id_unique = READ_ONCE(cur->mnt_id_unique);
+		}
+	} while (read_seqretry(&mount_lock, seq));
 	rcu_read_unlock();
-	read_sequnlock_excl(&mount_lock);
 }
 
 static void statmount_mnt_basic(struct kstatmount *s)
