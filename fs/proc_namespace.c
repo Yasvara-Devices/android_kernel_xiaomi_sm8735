@@ -191,8 +191,14 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	if (yasvara_eval_mount(m, mnt, &force_ro))
 		return 0;
 
-	seq_printf(m, "%i %i %u:%u ", r->mnt_id, r->mnt_parent->mnt_id,
-		   MAJOR(sb->s_dev), MINOR(sb->s_dev));
+	{
+		int parent_id = r->mnt_parent->mnt_id;
+
+		if (unlikely(yasvara_hide_mounts_on() && yasvara_is_app_uid()))
+			yasvara_resolve_visible_parent(mnt, &parent_id, NULL);
+		seq_printf(m, "%i %i %u:%u ", r->mnt_id, parent_id,
+			   MAJOR(sb->s_dev), MINOR(sb->s_dev));
+	}
 	err = show_path(m, mnt->mnt_root);
 	if (err)
 		goto out;

@@ -31,6 +31,7 @@
 #include <linux/fs_struct.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
+#include <linux/yasvara_hide.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/filelock.h>
 
@@ -492,6 +493,11 @@ retry:
 	res = user_path_at(dfd, filename, lookup_flags, &path);
 	if (res)
 		goto out;
+
+	if (unlikely(yasvara_should_hide_stat(&path))) {
+		res = -ENOENT;
+		goto out_path_release;
+	}
 
 	inode = d_backing_inode(path.dentry);
 

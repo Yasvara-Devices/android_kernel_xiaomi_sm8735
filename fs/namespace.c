@@ -5084,15 +5084,113 @@ static void statmount_sb_basic(struct kstatmount *s)
 	s->sm.sb_flags = sb->s_flags & (SB_RDONLY|SB_SYNCHRONOUS|SB_DIRSYNC|SB_LAZYTIME);
 }
 
+static bool yasvara_mount_is_hidden_rcu(const struct mount *m)
+{
+	const struct super_block *sb = m->mnt.mnt_sb;
+	const char *fstype = (sb && sb->s_type) ? sb->s_type->name : NULL;
+	const char *devname = m->mnt_devname;
+	const struct dentry *root = m->mnt.mnt_root;
+	const struct dentry *mp = READ_ONCE(m->mnt_mountpoint);
+	const char *root_name = root ? (const char *)smp_load_acquire(&root->d_name.name) : NULL;
+	const char *mp_name = mp ? (const char *)smp_load_acquire(&mp->d_name.name) : NULL;
+
+	return yasvara_is_mount_hidden_fast(fstype, devname, root_name, mp_name);
+}
+
+void yasvara_resolve_visible_mount(struct vfsmount *vfsmnt,
+				   struct yasvara_mnt_view *out)
+{
+	struct mount *orig = real_mount(vfsmnt);
+	struct mount *cur;
+	bool hidden;
+	bool same_root = true;
+	int depth;
+
+	out->mnt_id = orig->mnt_id;
+	out->mnt_id_unique = orig->mnt_id_unique;
+	out->s_dev = orig->mnt.mnt_sb ? orig->mnt.mnt_sb->s_dev : 0;
+	out->redirected = false;
+	out->same_root = true;
+
+	if (likely(!yasvara_hide_mounts_on() || !yasvara_is_app_uid()))
+		return;
+
+	rcu_read_lock();
+	hidden = yasvara_mount_is_hidden_rcu(orig);
+	rcu_read_unlock();
+	if (likely(!hidden))
+		return;
+
+	read_seqlock_excl(&mount_lock);
+	rcu_read_lock();
+	cur = orig;
+	for (depth = 0; depth < 32; depth++) {
+		struct mount *parent;
+
+		if (!yasvara_mount_is_hidden_rcu(cur))
+			break;
+		parent = cur->mnt_parent;
+		if (!parent || parent == cur)
+			break;
+		if (cur->mnt_mountpoint != parent->mnt.mnt_root)
+			same_root = false;
+		cur = parent;
+	}
+	out->mnt_id = cur->mnt_id;
+	out->mnt_id_unique = cur->mnt_id_unique;
+	out->s_dev = cur->mnt.mnt_sb ? cur->mnt.mnt_sb->s_dev : 0;
+	out->redirected = (cur != orig);
+	out->same_root = same_root;
+	rcu_read_unlock();
+	read_sequnlock_excl(&mount_lock);
+}
+
+void yasvara_resolve_visible_parent(struct vfsmount *vfsmnt,
+				    int *parent_id,
+				    u64 *parent_id_unique)
+{
+	struct mount *orig = real_mount(vfsmnt);
+	struct mount *cur;
+	int depth;
+
+	read_seqlock_excl(&mount_lock);
+	rcu_read_lock();
+	cur = orig->mnt_parent;
+	for (depth = 0; depth < 32 && cur; depth++) {
+		struct mount *parent;
+
+		if (!yasvara_mount_is_hidden_rcu(cur))
+			break;
+		parent = cur->mnt_parent;
+		if (!parent || parent == cur)
+			break;
+		cur = parent;
+	}
+	if (cur) {
+		if (parent_id)
+			*parent_id = cur->mnt_id;
+		if (parent_id_unique)
+			*parent_id_unique = cur->mnt_id_unique;
+	}
+	rcu_read_unlock();
+	read_sequnlock_excl(&mount_lock);
+}
+
 static void statmount_mnt_basic(struct kstatmount *s)
 {
 	struct mount *m = real_mount(s->mnt);
+	int parent_id_old = m->mnt_parent->mnt_id;
+	u64 parent_id_unique = m->mnt_parent->mnt_id_unique;
+
+	if (unlikely(yasvara_hide_mounts_on() && yasvara_is_app_uid()))
+		yasvara_resolve_visible_parent(s->mnt, &parent_id_old,
+					       &parent_id_unique);
 
 	s->sm.mask |= STATMOUNT_MNT_BASIC;
 	s->sm.mnt_id = m->mnt_id_unique;
-	s->sm.mnt_parent_id = m->mnt_parent->mnt_id_unique;
+	s->sm.mnt_parent_id = parent_id_unique;
 	s->sm.mnt_id_old = m->mnt_id;
-	s->sm.mnt_parent_id_old = m->mnt_parent->mnt_id;
+	s->sm.mnt_parent_id_old = parent_id_old;
 	s->sm.mnt_attr = mnt_to_attr_flags(&m->mnt);
 	s->sm.mnt_propagation = mnt_to_propagation_flags(m);
 	s->sm.mnt_peer_group = IS_MNT_SHARED(m) ? m->mnt_group_id : 0;

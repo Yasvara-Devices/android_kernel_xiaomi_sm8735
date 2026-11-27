@@ -35,6 +35,7 @@
 #include <linux/fcntl.h>
 #include <linux/device_cgroup.h>
 #include <linux/fs_struct.h>
+#include <linux/yasvara_hide.h>
 #include <linux/posix_acl.h>
 #include <linux/hash.h>
 #include <linux/bitops.h>
@@ -3791,6 +3792,8 @@ static int do_open(struct nameidata *nd,
 		if (error)
 			return error;
 	}
+	if (unlikely(yasvara_should_hide_open(&nd->path, open_flag)))
+		return -ENOENT;
 	if (!(file->f_mode & FMODE_CREATED))
 		audit_inode(nd->name, nd->path.dentry, 0);
 	idmap = mnt_idmap(nd->path.mnt);

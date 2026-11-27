@@ -617,8 +617,11 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 
 	if (vma->vm_file) {
 		const struct inode *inode = file_user_inode(vma->vm_file);
+		const struct path *vma_path = file_user_path(vma->vm_file);
 
 		dev = inode->i_sb->s_dev;
+		if (vma_path && vma_path->mnt)
+			dev = yasvara_visible_dev(vma_path->mnt, dev);
 		ino = inode->i_ino;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 	}

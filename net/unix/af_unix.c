@@ -88,6 +88,7 @@
 #include <linux/namei.h>
 #include <linux/socket.h>
 #include <linux/un.h>
+#include <linux/yasvara_hide.h>
 #include <linux/fcntl.h>
 #include <linux/filter.h>
 #include <linux/termios.h>
@@ -1438,6 +1439,11 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 		if (err)
 			goto out;
 
+		if (unlikely(yasvara_should_refuse_unix_connect(sunaddr, alen))) {
+			err = -ECONNREFUSED;
+			goto out;
+		}
+
 		err = BPF_CGROUP_RUN_PROG_UNIX_CONNECT_LOCK(sk, addr, &alen);
 		if (err)
 			goto out;
@@ -1558,6 +1564,11 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	err = unix_validate_addr(sunaddr, addr_len);
 	if (err)
 		goto out;
+
+	if (unlikely(yasvara_should_refuse_unix_connect(sunaddr, addr_len))) {
+		err = -ECONNREFUSED;
+		goto out;
+	}
 
 	err = BPF_CGROUP_RUN_PROG_UNIX_CONNECT_LOCK(sk, uaddr, &addr_len);
 	if (err)

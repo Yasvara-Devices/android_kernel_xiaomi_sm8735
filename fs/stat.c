@@ -18,6 +18,7 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
+#include <linux/yasvara_hide.h>
 #include <linux/iversion.h>
 
 #include <linux/uaccess.h>
@@ -231,6 +232,8 @@ int vfs_fstat(int fd, struct kstat *stat)
 	if (!fd_file(f))
 		return -EBADF;
 	error = vfs_getattr(&fd_file(f)->f_path, stat, STATX_BASIC_STATS, 0);
+	if (!error)
+		stat->dev = yasvara_visible_dev(fd_file(f)->f_path.mnt, stat->dev);
 	fdput(f);
 	return error;
 }
@@ -252,21 +255,33 @@ int getname_statx_lookup_flags(int flags)
 static int vfs_statx_path(struct path *path, int flags, struct kstat *stat,
 			  u32 request_mask)
 {
-	int error = vfs_getattr(path, stat, request_mask, flags);
+	int error;
+
+	if (unlikely(yasvara_should_hide_stat(path)))
+		return -ENOENT;
+
+	error = vfs_getattr(path, stat, request_mask, flags);
 	if (error)
 		return error;
 
-	if (request_mask & STATX_MNT_ID_UNIQUE) {
-		stat->mnt_id = real_mount(path->mnt)->mnt_id_unique;
-		stat->result_mask |= STATX_MNT_ID_UNIQUE;
-	} else {
-		stat->mnt_id = real_mount(path->mnt)->mnt_id;
-		stat->result_mask |= STATX_MNT_ID;
-	}
+	{
+		struct yasvara_mnt_view mnt_view;
 
-	if (path_mounted(path))
-		stat->attributes |= STATX_ATTR_MOUNT_ROOT;
-	stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+		yasvara_resolve_visible_mount(path->mnt, &mnt_view);
+		if (mnt_view.redirected)
+			stat->dev = mnt_view.s_dev;
+		if (request_mask & STATX_MNT_ID_UNIQUE) {
+			stat->mnt_id = mnt_view.mnt_id_unique;
+			stat->result_mask |= STATX_MNT_ID_UNIQUE;
+		} else {
+			stat->mnt_id = mnt_view.mnt_id;
+			stat->result_mask |= STATX_MNT_ID;
+		}
+
+		if (path_mounted(path) && (!mnt_view.redirected || mnt_view.same_root))
+			stat->attributes |= STATX_ATTR_MOUNT_ROOT;
+		stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+	}
 
 	/*
 	 * If this is a block device inode, override the filesystem
@@ -544,6 +559,12 @@ retry:
 	if (unlikely(error)) {
 		putname(name);
 		return error;
+	}
+
+	if (unlikely(yasvara_should_hide_stat(&path))) {
+		path_put(&path);
+		putname(name);
+		return -ENOENT;
 	}
 
 	/*

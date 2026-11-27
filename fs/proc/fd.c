@@ -15,6 +15,7 @@
 #include <linux/filelock.h>
 
 #include <linux/proc_fs.h>
+#include <linux/yasvara_hide.h>
 
 #include "../mount.h"
 #include "internal.h"
@@ -54,10 +55,15 @@ static int seq_show(struct seq_file *m, void *v)
 	if (ret)
 		return ret;
 
-	seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
-		   (long long)file->f_pos, f_flags,
-		   real_mount(file->f_path.mnt)->mnt_id,
-		   file_inode(file)->i_ino);
+	{
+		struct yasvara_mnt_view mnt_view;
+
+		yasvara_resolve_visible_mount(file->f_path.mnt, &mnt_view);
+		seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
+			   (long long)file->f_pos, f_flags,
+			   mnt_view.mnt_id,
+			   file_inode(file)->i_ino);
+	}
 
 	/* show_fd_locks() never dereferences files, so a stale value is safe */
 	show_fd_locks(m, file, files);

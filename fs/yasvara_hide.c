@@ -127,3 +127,38 @@ static int __init yasvara_hide_init(void)
 	return sysfs_create_group(kobj, &yasvara_hide_group);
 }
 late_initcall(yasvara_hide_init);
+
+bool yasvara_should_hide_path_slow(const struct path *path, int open_flag, bool is_open)
+{
+	char buf[256];
+	char *resolved;
+	u8 kind;
+
+	resolved = d_path(path, buf, sizeof(buf));
+	if (IS_ERR(resolved))
+		return false;
+	kind = yasvara_match_hidden_path(resolved);
+	if (kind == YASVARA_HIDE_PATH_NONE)
+		return false;
+	if (kind == YASVARA_HIDE_PATH_KAIT_IDLE && yasvara_hide_maps_on())
+		return false;
+	if (kind == YASVARA_HIDE_PATH_ADB)
+		return true;
+	if (is_open) {
+		/* Write/create/truncate opens fall through to the real file and real error. */
+		if (open_flag & (O_WRONLY | O_RDWR | O_CREAT | O_TMPFILE | O_TRUNC | O_EXCL))
+			return false;
+	}
+	return true;
+}
+
+u8 yasvara_classify_hide_dir_slow(const struct path *path)
+{
+	char buf[256];
+	char *resolved;
+
+	resolved = d_path(path, buf, sizeof(buf));
+	if (IS_ERR(resolved))
+		return YASVARA_DIR_NONE;
+	return yasvara_classify_hide_dir_path(resolved);
+}
